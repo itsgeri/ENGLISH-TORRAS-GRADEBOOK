@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { 
   User, LogOut, Plus, Edit2, Trash2, Save, X, BarChart2, 
-  MessageSquare, FileText, Activity, ChevronDown, ChevronRight, AlertCircle, CheckCircle, Download
+  MessageSquare, FileText, Activity, ChevronDown, ChevronRight, AlertCircle, CheckCircle, Download, Check, Loader2
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, query, updateDoc } from 'firebase/firestore';
 
-// --- CONFIGURACIÓN DE FIREBASE (Tus credenciales reales) ---
+// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyD_G5MyBC8wl5UiLWlpLkh9mQ7G0fca-Eo",
   authDomain: "gradebook-torras.firebaseapp.com",
@@ -25,9 +25,8 @@ const googleProvider = new GoogleAuthProvider();
 
 // --- CONSTANTES ---
 const FIELDS = ['Grammar', 'Listening', 'Reading', 'Writing', 'Speaking'];
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6'];
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-// Colores exactos para la exportación a PDF
 const PRINT_STYLES = {
   'Grammar': { short: 'GRAM.', head: '#e06666', cell: '#f4cccc' },
   'Listening': { short: 'LISTE.', head: '#f6b26b', cell: '#fce5cd' },
@@ -53,10 +52,8 @@ const calculateFieldScore = (studentId, field, activities, grades, attitude) => 
   });
 
   let average = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
-  
-  // Aplicar modificador de actitud
   const modifier = attitude?.[studentId]?.[field] || 0;
-  return Math.max(0, average + modifier); // Evitar notas negativas
+  return Math.max(0, average + modifier);
 };
 
 const calculateFinalMark = (studentId, activities, grades, attitude, overrides) => {
@@ -78,7 +75,6 @@ const calculateFinalMark = (studentId, activities, grades, attitude, overrides) 
   return activeFields > 0 ? (totalScore / activeFields) : 0;
 };
 
-// --- COMPONENTE DE LOGIN ---
 function AuthScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,30 +85,31 @@ function AuthScreen() {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      setError("Failed to login with Google. Please try again.");
-      console.error(err);
+      setError('Failed to login with Google. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50 font-sans text-slate-800 p-4">
+    <div className="flex items-center justify-center min-h-screen bg-slate-50 font-sans p-4">
       <div className="bg-white p-10 rounded-3xl shadow-xl w-full max-w-md transform transition-all duration-500 hover:shadow-2xl text-center">
         <div className="flex justify-center mb-6 text-blue-600">
           <div className="bg-blue-50 p-5 rounded-full">
             <FileText size={48} className="text-blue-600" />
           </div>
         </div>
-        <h2 className="text-3xl font-black mb-1 text-slate-800 tracking-tight">NeoGradebook <span className="text-blue-600">PRO</span></h2>
-        <p className="text-xs font-bold text-slate-400 mb-6 tracking-wide uppercase">
-          by Gerard <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-2">v0.1 BETA</span>
-        </p>
-        <p className="text-slate-500 mb-8">Sign in securely to access your classes.</p>
+        <h2 className="text-3xl font-black mb-2 text-slate-800 tracking-tight">
+          NeoGradebook <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">PRO</span>
+        </h2>
+        <div className="flex items-center justify-center gap-2 mb-8">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">by Gerard</span>
+          <span className="bg-indigo-50 text-indigo-600 border border-indigo-100 text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm tracking-wider">v0.1 BETA</span>
+        </div>
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 flex items-center justify-center gap-2">
-            <AlertCircle size={16} className="shrink-0" />
+            <AlertCircle size={18} className="shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -120,17 +117,19 @@ function AuthScreen() {
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl p-4 transition-all duration-300 shadow-sm disabled:opacity-70 flex items-center justify-center gap-3 text-lg"
+          className="w-full bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl p-4 transition-all duration-300 shadow-sm flex items-center justify-center gap-3 disabled:opacity-50"
         >
           {loading ? (
-            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <Loader2 className="animate-spin" size={24} />
           ) : (
             <>
-              <svg className="w-6 h-6" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                  <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
+                  <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
+                  <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
+                  <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
+                </g>
               </svg>
               Sign in with Google
             </>
@@ -141,7 +140,6 @@ function AuthScreen() {
   );
 }
 
-// --- APP PRINCIPAL ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -157,7 +155,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
       </div>
     );
   }
@@ -169,13 +167,11 @@ export default function App() {
   return <MainDashboard user={user} />;
 }
 
-// --- DASHBOARD (Sidebar y Selector de Clases) ---
 function MainDashboard({ user }) {
   const [classes, setClasses] = useState([]);
   const [activeClassId, setActiveClassId] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // Modals & UI State
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -217,12 +213,11 @@ function MainDashboard({ user }) {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
-      {/* Estilos de Animación e Impresión */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
           #print-section, #print-section * { visibility: visible; }
-          #print-section { position: absolute; left: 0; top: 0; width: 100%; padding: 0px; background: white; z-index: 9999; }
+          #print-section { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; background: white; z-index: 9999; }
           .no-print { display: none !important; }
         }
         .modal-enter { animation: modalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -231,7 +226,10 @@ function MainDashboard({ user }) {
           from { opacity: 0; transform: scale(0.95) translateY(10px); }
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
-        @keyframes fadeEnter { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeEnter {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `}</style>
 
       {/* Barra Lateral */}
@@ -242,9 +240,11 @@ function MainDashboard({ user }) {
               <FileText size={20} className="text-blue-400"/>
             </div>
             <div className="flex flex-col">
-              <h1 className="font-bold text-base text-white tracking-wide leading-tight">NeoGradebook <span className="text-blue-400">PRO</span></h1>
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
-                by Gerard <span className="text-blue-400/80 ml-1">v0.1 BETA</span>
+              <h1 className="font-bold text-base text-white tracking-wide leading-tight flex items-center gap-1.5">
+                NeoGradebook <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider shadow-sm">PRO</span>
+              </h1>
+              <span className="text-[10px] font-semibold text-slate-400 mt-0.5 flex items-center gap-1.5">
+                by Gerard <span className="bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.5 rounded-[4px] text-[8px] font-bold tracking-widest">v0.1 BETA</span>
               </span>
             </div>
           </div>
@@ -253,7 +253,7 @@ function MainDashboard({ user }) {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto py-6">
+        <div className="flex-1 overflow-y-auto py-6 scrollbar-hide">
           {sidebarOpen && <div className="px-6 text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">My Classes</div>}
           <div className="space-y-1 px-3">
             {classes.map(c => (
@@ -261,7 +261,9 @@ function MainDashboard({ user }) {
                 key={c.id}
                 onClick={() => setActiveClassId(c.id)}
                 className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-4 transition-all duration-200 group
-                  ${activeClassId === c.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800 hover:text-white'}`}
+                  ${activeClassId === c.id 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' 
+                    : 'hover:bg-slate-800 hover:text-white'}`}
                 title={c.name}
               >
                 <div className={`p-1.5 rounded-md transition-colors ${activeClassId === c.id ? 'bg-white/20' : 'bg-slate-800 group-hover:bg-slate-700'}`}>
@@ -284,7 +286,9 @@ function MainDashboard({ user }) {
         <div className="p-5 border-t border-slate-800 bg-slate-950/50">
           <div className="flex flex-col gap-4">
             <div className={`flex items-center gap-3 overflow-hidden whitespace-nowrap transition-all duration-300 ${sidebarOpen ? 'w-full opacity-100' : 'w-0 opacity-0 hidden'}`}>
-               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=0D8ABC&color=fff`} alt="avatar" className="w-8 h-8 rounded-full" />
+               <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
+                 <User size={14} className="text-slate-400" />
+               </div>
                <span className="truncate text-sm font-medium text-slate-400">{user.email}</span>
             </div>
             <button onClick={() => signOut(auth)} className={`flex items-center gap-3 text-red-400/80 hover:text-red-400 transition-colors group ${!sidebarOpen ? 'justify-center' : ''}`}>
@@ -295,12 +299,11 @@ function MainDashboard({ user }) {
         </div>
       </div>
 
-      {/* Contenido Principal */}
       <div className="flex-1 flex flex-col min-w-0 bg-white z-20 shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.3)] rounded-l-[2rem] overflow-hidden">
         {dataLoading ? (
            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-4">
-             <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin"></div>
-             <p>Loading data...</p>
+             <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+             <p>Cargando datos...</p>
            </div>
         ) : activeClass ? (
            <ClassView key={activeClass.id} activeClass={activeClass} userId={user.uid} />
@@ -311,14 +314,13 @@ function MainDashboard({ user }) {
              </div>
              <h2 className="text-2xl font-bold text-slate-700 mb-2">No Classes Found</h2>
              <p className="text-slate-500 mb-8 max-w-sm">Create your first class to start tracking grades, adding activities, and generating reports.</p>
-             <button onClick={() => setIsClassModalOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl transition-all duration-300 shadow-lg shadow-blue-600/30 hover:shadow-blue-600/40 hover:-translate-y-0.5 font-medium">
+             <button onClick={() => setIsClassModalOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl transition-all duration-300 shadow-lg shadow-blue-600/30 font-medium">
                <Plus size={20} /> Create Your First Class
              </button>
            </div>
         )}
       </div>
 
-      {/* Modal Crear Clase */}
       {isClassModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-[400px] modal-enter border border-slate-100">
@@ -338,7 +340,7 @@ function MainDashboard({ user }) {
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => setIsClassModalOpen(false)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-              <button onClick={handleCreateClass} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all duration-300 shadow-lg shadow-blue-600/30">Create Class</button>
+              <button onClick={handleCreateClass} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-blue-600/30">Create Class</button>
             </div>
           </div>
         </div>
@@ -347,30 +349,29 @@ function MainDashboard({ user }) {
   );
 }
 
-// --- VISTA DE LA CLASE (GRID TIPO EXCEL) ---
 function ClassView({ activeClass, userId }) {
   const [studentName, setStudentName] = useState('');
-  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle', 'saving', 'saved', 'error'
   
-  // Modal States
   const [activityModal, setActivityModal] = useState({ isOpen: false, field: 'Grammar', name: '', weight: 10 });
   const [attitudeModal, setAttitudeModal] = useState({ isOpen: false, studentId: null });
   const [commentModal, setCommentModal] = useState({ isOpen: false, studentId: null, text: '' });
   const [overrideModal, setOverrideModal] = useState({ isOpen: false, studentId: null, val: '' });
   const [chartsOpen, setChartsOpen] = useState(false);
 
-  // Guardar en Firebase con indicador visual
+  const [saveStatus, setSaveStatus] = useState('idle');
+  const saveTimeoutRef = useRef(null);
+
   const updateClassData = async (updates) => {
     setSaveStatus('saving');
-    try {
-      const classRef = doc(db, 'users', userId, 'classes', activeClass.id);
-      await updateDoc(classRef, updates);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (error) {
-      console.error(error);
-      setSaveStatus('error');
-    }
+    const classRef = doc(db, 'users', userId, 'classes', activeClass.id);
+    await updateDoc(classRef, updates);
+    
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    
+    setSaveStatus('saved');
+    saveTimeoutRef.current = setTimeout(() => {
+      setSaveStatus('idle');
+    }, 2000);
   };
 
   const handleAddStudent = async (e) => {
@@ -444,29 +445,26 @@ function ClassView({ activeClass, userId }) {
     setOverrideModal({ isOpen: false, studentId: null, val: '' });
   };
 
-  // Función para exportar datos a CSV (Excel)
-  const exportToCSV = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    // Cabeceras
-    csvContent += "Student Name,Grammar,Listening,Reading,Writing,Speaking,Final Mark,Comments\n";
-
+  const exportCSV = () => {
+    let csv = 'Student Name,';
+    csv += FIELDS.join(',') + ',Final Mark,Comments\n';
+    
     activeClass.students.forEach(student => {
-      const grammar = calculateFieldScore(student.id, 'Grammar', activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(2);
-      const listening = calculateFieldScore(student.id, 'Listening', activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(2);
-      const reading = calculateFieldScore(student.id, 'Reading', activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(2);
-      const writing = calculateFieldScore(student.id, 'Writing', activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(2);
-      const speaking = calculateFieldScore(student.id, 'Speaking', activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(2);
-      const final = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitude, activeClass.overrides).toFixed(2);
-      const comments = `"${(student.comments || '').replace(/"/g, '""')}"`; // Escapar comillas dobles
-
-      const row = [`"${student.name}"`, grammar, listening, reading, writing, speaking, final, comments];
-      csvContent += row.join(",") + "\n";
+      let row = `"${student.name}",`;
+      FIELDS.forEach(field => {
+        row += `${calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitude).toFixed(1)},`;
+      });
+      const final = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitude, activeClass.overrides);
+      row += `${final.toFixed(1)},"${(student.comments || '').replace(/"/g, '""')}"\n`;
+      csv += row;
     });
 
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${activeClass.name}_grades.csv`);
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${activeClass.name.replace(/\s+/g, '_')}_Grades.csv`);
+    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -475,8 +473,8 @@ function ClassView({ activeClass, userId }) {
   return (
     <div className="flex flex-col h-full relative fade-enter">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between z-20 no-print sticky top-0 rounded-tl-[2rem]">
-        <div className="flex items-center gap-4">
+      <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-20 no-print sticky top-0 rounded-tl-[2rem]">
+        <div className="flex items-center gap-6">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">{activeClass.name}</h2>
             <p className="text-sm font-medium text-slate-500 flex items-center gap-2 mt-1">
@@ -484,33 +482,29 @@ function ClassView({ activeClass, userId }) {
             </p>
           </div>
           
-          {/* Autosave Indicator */}
-          <div className="ml-6 flex items-center gap-2 text-sm font-bold bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 text-sm font-medium">
+            {saveStatus === 'saving' && <><Loader2 size={14} className="animate-spin text-blue-500"/> <span className="text-blue-600">Saving...</span></>}
+            {saveStatus === 'saved' && <><Check size={14} className="text-emerald-500"/> <span className="text-emerald-600">Saved</span></>}
             {saveStatus === 'idle' && <span className="text-slate-400">All changes saved</span>}
-            {saveStatus === 'saving' && <><div className="w-4 h-4 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div> <span className="text-blue-600">Saving...</span></>}
-            {saveStatus === 'saved' && <><CheckCircle size={16} className="text-emerald-500"/> <span className="text-emerald-600">Saved</span></>}
-            {saveStatus === 'error' && <><AlertCircle size={16} className="text-red-500"/> <span className="text-red-600">Error</span></>}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={exportToCSV} className="flex items-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition-colors font-semibold border border-slate-200 shadow-sm" title="Download Excel CSV">
-            <Download size={18} /> Data
-          </button>
-          <button onClick={() => setChartsOpen(true)} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 px-4 py-2.5 rounded-xl transition-colors font-semibold border border-indigo-200/50 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setChartsOpen(true)} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-xl transition-colors font-semibold shadow-sm">
             <BarChart2 size={18} /> Charts
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 px-4 py-2.5 rounded-xl transition-colors font-semibold border border-emerald-200/50 shadow-sm">
-            <FileText size={18} /> Export PDF
+          <button onClick={exportCSV} className="flex items-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition-colors font-semibold shadow-sm">
+            <Download size={18} /> CSV
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-4 py-2.5 rounded-xl transition-colors font-semibold shadow-sm">
+            <FileText size={18} /> PDF
           </button>
         </div>
       </div>
 
-      {/* Grid Principal (Estilo Excel) */}
       <div className="flex-1 overflow-auto bg-slate-50/50 no-print relative">
         <table className="w-full border-collapse table-fixed min-w-max">
           <thead className="bg-white sticky top-0 z-10 shadow-sm">
-            {/* Fila 1: Nombres de Campos */}
             <tr>
               <th className="w-64 p-0 sticky left-0 z-20 bg-white border-b-2 border-r border-slate-200">
                 <div className="px-6 py-4 flex items-center justify-between h-full bg-slate-50/80 backdrop-blur-md">
@@ -530,15 +524,10 @@ function ClassView({ activeClass, userId }) {
                   </th>
                 );
               })}
-              <th className="w-28 border-b-2 border-r border-slate-200 p-3 bg-slate-100 text-center font-black text-slate-800">
-                FINAL
-              </th>
-              <th className="w-28 border-b-2 border-slate-200 p-3 bg-white text-center text-slate-600 font-bold">
-                EXTRAS
-              </th>
+              <th className="w-28 border-b-2 border-r border-slate-200 p-3 bg-slate-100 text-center font-black text-slate-800">FINAL</th>
+              <th className="w-28 border-b-2 border-slate-200 p-3 bg-white text-center text-slate-600 font-bold">EXTRAS</th>
             </tr>
 
-            {/* Fila 2: Nombres de Actividades */}
             <tr className="text-sm">
               <th className="sticky left-0 z-20 bg-white border-b-2 border-r border-slate-200 p-3 text-left align-bottom shadow-[4px_0_10px_-5px_rgba(0,0,0,0.1)]">
                  <input 
@@ -577,7 +566,6 @@ function ClassView({ activeClass, userId }) {
 
               return (
                 <tr key={student.id} className="hover:bg-blue-50/50 transition-colors group">
-                  {/* Nombre Estudiante */}
                   <td className="sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 border-b border-r border-slate-200 p-0 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.1)] transition-colors">
                     <div className="flex items-center justify-between px-6 py-3">
                       <span className="font-semibold text-slate-700">{student.name}</span>
@@ -587,7 +575,6 @@ function ClassView({ activeClass, userId }) {
                     </div>
                   </td>
 
-                  {/* Celdas de Notas */}
                   {FIELDS.map(field => {
                     const acts = activeClass.activities.filter(a => a.field === field);
                     if (acts.length === 0) {
@@ -609,7 +596,6 @@ function ClassView({ activeClass, userId }) {
                     });
                   })}
 
-                  {/* Nota Final */}
                   <td 
                     className={`border-b border-r border-slate-200 p-2 text-center cursor-pointer transition-all duration-300 relative
                       ${isOverridden 
@@ -625,7 +611,6 @@ function ClassView({ activeClass, userId }) {
                     </div>
                   </td>
 
-                  {/* Extras (Botones) */}
                   <td className="border-b border-slate-200 p-2 bg-white group-hover:bg-transparent transition-colors">
                     <div className="flex items-center justify-center gap-2">
                       <button 
@@ -651,7 +636,6 @@ function ClassView({ activeClass, userId }) {
           </tbody>
         </table>
         
-        {/* Placeholder if empty */}
         {activeClass.students.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 pointer-events-none fade-enter mt-20">
             <User size={48} className="mb-4 opacity-20" />
@@ -661,8 +645,7 @@ function ClassView({ activeClass, userId }) {
         )}
       </div>
 
-      {/* --- NUEVO FORMATO DE IMPRESIÓN (PDF) EXACTO A LA IMAGEN --- */}
-      <div id="print-section" className="hidden no-print bg-white p-4">
+      <div id="print-section" className="hidden no-print bg-white">
         <h1 className="text-xl font-bold mb-4 text-black uppercase">{activeClass.name}</h1>
         
         <table className="w-full border-collapse mb-6 text-[14px] border border-black">
@@ -691,7 +674,6 @@ function ClassView({ activeClass, userId }) {
                     const score = calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitude);
                     const style = PRINT_STYLES[field] || { cell: '#f3f3f3' };
                     
-                    // Formateo de notas (ej. "7,5" en vez de "7.5")
                     let displayScore = '-';
                     if (score > 0) {
                       displayScore = score % 1 === 0 ? score.toString() : score.toFixed(1).replace('.', ',');
@@ -712,11 +694,11 @@ function ClassView({ activeClass, userId }) {
           </tbody>
         </table>
         
-        <div className="space-y-4 max-w-4xl">
+        <div className="space-y-4">
           {activeClass.students.map(student => {
             if (!student.comments) return null;
             return (
-              <p key={student.id} className="text-[14px] text-justify leading-relaxed text-black font-serif">
+              <p key={student.id} className="text-[14px] text-justify leading-relaxed text-black">
                 <strong>{student.name}:</strong> {student.comments}
               </p>
             )
@@ -724,7 +706,6 @@ function ClassView({ activeClass, userId }) {
         </div>
       </div>
 
-      {/* Modal Añadir Actividad */}
       {activityModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-[400px] modal-enter border border-slate-100">
@@ -745,7 +726,6 @@ function ClassView({ activeClass, userId }) {
                   <input type="number" min="0" value={activityModal.weight} onChange={e => setActivityModal({...activityModal, weight: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 pr-10 focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"/>
                   <span className="absolute right-4 top-3 text-slate-400 font-bold">%</span>
                 </div>
-                <p className="text-xs text-slate-500 mt-2 leading-relaxed">Weights are proportional. E.g., if you have two activities with weights 10 and 20, the second counts twice as much as the first.</p>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-8">
@@ -756,7 +736,6 @@ function ClassView({ activeClass, userId }) {
         </div>
       )}
 
-      {/* Modal de Actitud */}
       {attitudeModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
           <div className="bg-white rounded-3xl shadow-2xl p-8 w-[450px] modal-enter border border-slate-100">
@@ -790,7 +769,6 @@ function ClassView({ activeClass, userId }) {
         </div>
       )}
 
-      {/* Modal de Sobreescritura Manual */}
       {overrideModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
           <div className="bg-white rounded-3xl shadow-2xl p-8 w-[380px] modal-enter border-t-8 border-t-amber-400">
@@ -818,7 +796,6 @@ function ClassView({ activeClass, userId }) {
         </div>
       )}
 
-      {/* Modal de Comentarios */}
       {commentModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
           <div className="bg-white rounded-3xl shadow-2xl p-8 w-[600px] modal-enter border border-slate-100">
@@ -849,7 +826,6 @@ function ClassView({ activeClass, userId }) {
         </div>
       )}
 
-      {/* Modal de Gráficos (Dashboard) */}
       {chartsOpen && (
         <div className="fixed inset-0 bg-slate-100/95 backdrop-blur-md z-50 flex flex-col fade-enter">
           <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shadow-sm">
@@ -910,7 +886,6 @@ function ClassView({ activeClass, userId }) {
                 );
               })}
 
-              {/* Distribución Global */}
               <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-3xl shadow-xl shadow-indigo-500/30 flex flex-col h-[380px] modal-enter text-white">
                  <div className="text-center mb-2">
                    <h3 className="font-black text-xl tracking-wide">Global Distribution</h3>
