@@ -2,4 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-body { margin: 0; font-family: sans-serif; }
+/* Estilos extra para que el fondo sea limpio */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8fafc; /* Un gris muy clarito profesional */
+  font-family: sans-serif;
+}
