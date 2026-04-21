@@ -104,7 +104,10 @@ function AuthScreen() {
             <FileText size={48} className="text-blue-600" />
           </div>
         </div>
-        <h2 className="text-3xl font-bold mb-3 text-slate-800">Torras Gradebook</h2>
+        <h2 className="text-3xl font-black mb-1 text-slate-800 tracking-tight">NeoGradebook <span className="text-blue-600">PRO</span></h2>
+        <p className="text-xs font-bold text-slate-400 mb-6 tracking-wide uppercase">
+          by Gerard <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-2">v0.1 BETA</span>
+        </p>
         <p className="text-slate-500 mb-8">Sign in securely to access your classes.</p>
 
         {error && (
@@ -235,10 +238,15 @@ function MainDashboard({ user }) {
       <div className={`${sidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 ease-in-out bg-slate-900 text-slate-300 flex flex-col no-print z-30 shadow-2xl relative`}>
         <div className="p-5 flex items-center justify-between border-b border-slate-800">
           <div className={`flex items-center gap-3 overflow-hidden whitespace-nowrap transition-all duration-300 ${sidebarOpen ? 'w-full opacity-100' : 'w-0 opacity-0'}`}>
-            <div className="bg-blue-500/20 p-1.5 rounded-lg">
+            <div className="bg-blue-500/20 p-1.5 rounded-lg shrink-0">
               <FileText size={20} className="text-blue-400"/>
             </div>
-            <h1 className="font-bold text-lg text-white tracking-wide">Gradebook</h1>
+            <div className="flex flex-col">
+              <h1 className="font-bold text-base text-white tracking-wide leading-tight">NeoGradebook <span className="text-blue-400">PRO</span></h1>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                by Gerard <span className="text-blue-400/80 ml-1">v0.1 BETA</span>
+              </span>
+            </div>
           </div>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors absolute right-4">
             {sidebarOpen ? <ChevronDown size={20}/> : <ChevronRight size={20}/>}
