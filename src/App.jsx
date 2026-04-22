@@ -336,7 +336,7 @@ function MainDashboard({ user, isDebug }) {
   const [activeClassId, setActiveClassId] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
   
-  const [globalSettings, setGlobalSettings] = useState({ theme: 'aurora', aiContext: '', schoolName: '', compactMode: false, highlightFailing: true });
+  const [globalSettings, setGlobalSettings] = useState({ theme: 'aurora', aiContext: '', schoolName: '', compactMode: false, highlightFailing: true, geminiApiKey: '' });
   const [hasSeenPatchNotes, setHasSeenPatchNotes] = useState(localStorage.getItem('seenPatchNotes_v0.2') === 'true');
 
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
@@ -549,7 +549,11 @@ function MainDashboard({ user, isDebug }) {
               <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm">
                 <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${theme.blob3}`}></div> AI Writing Style Context</h4>
                 <p className="text-xs text-slate-500 mb-3 font-medium leading-relaxed">Paste 2 or 3 of your best previous report comments here. The Gemini AI will analyze them and mimic your tone, vocabulary, and structure perfectly when generating new drafts.</p>
-                <textarea value={globalSettings.aiContext} onChange={e => setGlobalSettings({...globalSettings, aiContext: e.target.value})} className={`w-full h-32 border border-white/80 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 placeholder:text-slate-400 leading-relaxed`} placeholder="Example: Joan has shown exceptional dedication this term. While his grammar needs refinement, his enthusiasm in speaking exercises is commendable..."/>
+                <textarea value={globalSettings.aiContext} onChange={e => setGlobalSettings({...globalSettings, aiContext: e.target.value})} className={`w-full h-24 mb-4 border border-white/80 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 placeholder:text-slate-400 leading-relaxed`} placeholder="Example: Joan has shown exceptional dedication this term. While his grammar needs refinement..."/>
+                
+                <h4 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm mt-2">Gemini API Key</h4>
+                <p className="text-xs text-slate-500 mb-2 font-medium">Get a free key from aistudio.google.com to enable Magic Drafts.</p>
+                <input type="password" value={globalSettings.geminiApiKey || ''} onChange={e => setGlobalSettings({...globalSettings, geminiApiKey: e.target.value})} className={`w-full border border-white/80 rounded-2xl p-3 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium placeholder:text-slate-400 ${theme.accentRing} focus:ring-4`} placeholder="AIzaSy..."/>
               </div>
 
             </div>
@@ -596,6 +600,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [attitudeModal, setAttitudeModal] = useState({ isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' });
   const [commentModal, setCommentModal] = useState({ isOpen: false, studentId: null, text: '', aiPrompt: '', aiLanguage: 'English' });
   const [overrideModal, setOverrideModal] = useState({ isOpen: false, studentId: null, field: null, val: '' });
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const cellPad = globalSettings.compactMode ? 'p-1' : 'p-2';
 
@@ -716,6 +721,63 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     const updatedStudents = activeClass.students.map(s => s.id === commentModal.studentId ? { ...s, comments: commentModal.text } : s);
     await updateClassData({ students: updatedStudents });
     setCommentModal({ ...commentModal, isOpen: false });
+  };
+
+  const handleGenerateDraft = async () => {
+    const apiKey = globalSettings.geminiApiKey || "";
+    if (!apiKey && typeof __firebase_config === 'undefined') {
+      window.alert("Please enter your Gemini API Key in the Global Settings to use the AI Assistant.");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const student = activeClass.students.find(s => s.id === commentModal.studentId);
+      
+      // Gather grades
+      const scores = FIELDS.map(f => {
+         const s = calculateFieldScore(student.id, f, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
+         return `${f}: ${s.toFixed(1)}`;
+      }).join(', ');
+      const final = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(1);
+
+      const systemInstruction = `You are an expert teacher writing a report card comment. 
+      Language: ${commentModal.aiLanguage}. 
+      Adopt the following writing style and tone based on these past examples: "${globalSettings.aiContext || 'Professional, constructive, and encouraging.'}".
+      Do not include placeholders. Write a single, polished paragraph.`;
+
+      const userQuery = `Student: ${student.name}. 
+      Current Grades: ${scores}. Final Average: ${final}.
+      Teacher's Quick Notes: ${commentModal.aiPrompt || 'Has done well this term.'}
+      Write the final report card comment based on these notes and grades. Make it sound natural.`;
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      const payload = {
+          contents: [{ parts: [{ text: userQuery }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+      };
+
+      const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+      const candidate = result.candidates?.[0];
+      
+      if (candidate && candidate.content?.parts?.[0]?.text) {
+         setCommentModal(prev => ({ ...prev, text: candidate.content.parts[0].text }));
+      } else {
+         window.alert("Failed to generate. Please check your API key.");
+      }
+    } catch (error) {
+      console.error("AI Generation Error:", error);
+      window.alert("An error occurred. Check the console for details.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const exportCSV = () => {
@@ -1236,8 +1298,8 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                   </div>
                   <label className="block text-sm font-bold text-slate-700 mb-2 mt-4">2. Quick Notes</label>
                   <textarea value={commentModal.aiPrompt} onChange={e => setCommentModal({...commentModal, aiPrompt: e.target.value})} className={`w-full h-24 border border-white/80 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 placeholder:text-slate-400`} placeholder="E.g. Great effort this term, speaking is improving but grammar needs work..."/>
-                  <button className={`w-full mt-3 py-3 bg-slate-900 hover:bg-black text-white font-black tracking-wide rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2`} onClick={() => alert("AI Generation is ready! Paste your real Gemini API key in the code to enable.")}>
-                    Generate Magic Draft
+                  <button disabled={isGenerating} className={`w-full mt-3 py-3 bg-slate-900 hover:bg-black text-white font-black tracking-wide rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70`} onClick={handleGenerateDraft}>
+                    {isGenerating ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : 'Generate Magic Draft'}
                   </button>
                 </div>
 
