@@ -88,7 +88,7 @@ const THEMES = {
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
-const formatDate = (isoString) => new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+const formatDate = (isoString) => new Date(isoString).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
 
 const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs, overrides) => {
   if (overrides?.[studentId]?.[field] !== undefined) {
@@ -112,7 +112,7 @@ const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs,
 
   let average = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
   
-  // Calculate attitude applied specifically to this field
+  // Calcular la actitud aplicada específicamente a este campo
   const studentLogs = attitudeLogs?.[studentId] || [];
   const fieldAttitude = studentLogs.reduce((acc, log) => {
     if (log.field === field && log.fieldDelta) return acc + log.fieldDelta;
@@ -158,7 +158,7 @@ function AuthScreen({ onDebugLogin }) {
   const [keys, setKeys] = useState([]);
   const [portalAnim, setPortalAnim] = useState(false);
 
-  // Konami Code: Up Up Down Down Left Right Left Right B A
+  // Código Konami: Arriba Arriba Abajo Abajo Izquierda Derecha Izquierda Derecha B A
   const KONAMI_CODE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
 
   useEffect(() => {
@@ -189,7 +189,7 @@ function AuthScreen({ onDebugLogin }) {
 
   return (
     <div className="relative min-h-screen bg-slate-50 font-sans text-slate-800 flex items-center justify-center p-4 overflow-hidden">
-      {/* Background Orbs */}
+      {/* Orbes de Fondo */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none opacity-60">
         <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-violet-300 mix-blend-multiply filter blur-[100px] opacity-70 animate-blob"></div>
         <div className="absolute top-[20%] -right-[10%] w-[40%] h-[40%] rounded-full bg-cyan-300 mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-2000"></div>
@@ -346,7 +346,7 @@ function MainDashboard({ user, isDebug }) {
 
   const theme = THEMES[globalSettings.theme] || THEMES.aurora;
 
-  // Load Settings
+  // Cargar Configuración
   useEffect(() => {
     const savedSettings = localStorage.getItem(`neoGradebookSettings_${user.uid}`);
     if (savedSettings) {
@@ -365,7 +365,7 @@ function MainDashboard({ user, isDebug }) {
     localStorage.setItem('seenPatchNotes_v0.2', 'true');
   };
 
-  // Load Data
+  // Cargar Datos
   useEffect(() => {
     if (isDebug) {
       const mockClass = {
@@ -419,7 +419,7 @@ function MainDashboard({ user, isDebug }) {
         }
       `}</style>
 
-      {/* Ambient Glass Blobs */}
+      {/* Blobs de Cristal Ambientales */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none opacity-50">
         <div className={`absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full ${theme.blob1} mix-blend-multiply filter blur-[100px] opacity-70 animate-blob`}></div>
         <div className={`absolute top-[20%] right-[-10%] w-[40%] h-[40%] rounded-full ${theme.blob2} mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-2000`}></div>
@@ -430,7 +430,7 @@ function MainDashboard({ user, isDebug }) {
         {!hasSeenPatchNotes && <PatchNotesModal onClose={closePatchNotes} theme={theme} />}
       </AnimatePresence>
 
-      {/* Frosted Sidebar */}
+      {/* Barra Lateral Esmerilada */}
       <div className={`${sidebarOpen ? 'w-72' : 'w-24'} transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-white/40 backdrop-blur-3xl m-4 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 flex flex-col relative z-20`}>
         <div className="p-6 flex items-center justify-between">
           <div className={`flex items-center gap-3 overflow-hidden whitespace-nowrap transition-all duration-500 ${sidebarOpen ? 'w-full opacity-100' : 'w-0 opacity-0 hidden'}`}>
@@ -477,7 +477,7 @@ function MainDashboard({ user, isDebug }) {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Área de Contenido Principal */}
       <div className="flex-1 flex flex-col min-w-0 z-10 py-4 pr-4 pl-0">
         {dataLoading ? (
            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 space-y-4">
@@ -498,7 +498,7 @@ function MainDashboard({ user, isDebug }) {
         )}
       </div>
 
-      {/* Global Settings Modal */}
+      {/* Modal de Configuración Global */}
       <AnimatePresence>
       {isSettingsOpen && (
         <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -565,7 +565,7 @@ function MainDashboard({ user, isDebug }) {
       )}
       </AnimatePresence>
 
-      {/* Class Creation Modal */}
+      {/* Modal de Creación de Clase */}
       <AnimatePresence>
       {isClassModalOpen && (
         <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -590,12 +590,15 @@ function MainDashboard({ user, isDebug }) {
   );
 }
 
-function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setClasses, classes }) {
+function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setClasses, classes, onDeleteClass }) {
   const [studentName, setStudentName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving'
   
+  const [editingStudentId, setEditingStudentId] = useState(null);
+  const [editStudentName, setEditStudentName] = useState('');
+
   const [activityModal, setActivityModal] = useState({ isOpen: false, field: 'Grammar', name: '', weight: 10 });
   const [attitudeModal, setAttitudeModal] = useState({ isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' });
   const [commentModal, setCommentModal] = useState({ isOpen: false, studentId: null, text: '', aiPrompt: '', aiLanguage: 'English' });
@@ -631,6 +634,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     if(window.confirm("Remove this student completely?")) {
       await updateClassData({ students: activeClass.students.filter(s => s.id !== studentId) });
     }
+  };
+
+  const handleRenameStudent = async (studentId) => {
+    if (editStudentName.trim() && editStudentName !== activeClass.students.find(s => s.id === studentId)?.name) {
+      const updated = activeClass.students.map(s => s.id === studentId ? { ...s, name: editStudentName.trim() } : s);
+      await updateClassData({ students: updated });
+    }
+    setEditingStudentId(null);
   };
 
   const handleAddActivity = async () => {
@@ -734,7 +745,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     try {
       const student = activeClass.students.find(s => s.id === commentModal.studentId);
       
-      // Gather grades
+      // Reunir notas
       const scores = FIELDS.map(f => {
          const s = calculateFieldScore(student.id, f, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
          return `${f}: ${s.toFixed(1)}`;
@@ -808,7 +819,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     a.click();
   };
 
-  // Sorting Logic
+  // Lógica de Clasificación
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -818,12 +829,12 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const processedStudents = useMemo(() => {
     let sortable = [...activeClass.students];
     
-    // Filter
+    // Filtrar
     if (searchTerm) {
       sortable = sortable.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }
 
-    // Sort
+    // Clasificar
     if (sortConfig.key) {
       sortable.sort((a, b) => {
         if (sortConfig.key === 'name') {
@@ -839,12 +850,12 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     return sortable;
   }, [activeClass, searchTerm, sortConfig]);
 
-  // Class Averages Calculation
+  // Cálculo de promedios de la clase
   const classAverages = useMemo(() => {
     const avgs = { activities: {}, fields: {}, final: 0 };
     if (activeClass.students.length === 0) return avgs;
 
-    // Activity Avgs
+    // Promedios de Actividades
     activeClass.activities.forEach(act => {
       let sum = 0, count = 0;
       activeClass.students.forEach(s => {
@@ -854,7 +865,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
       avgs.activities[act.id] = count > 0 ? (sum / count) : 0;
     });
 
-    // Field & Final Avgs
+    // Promedios Finales y de Campos
     let finalSum = 0;
     FIELDS.forEach(field => {
       let fieldSum = 0;
@@ -875,12 +886,13 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 
   return (
     <div className="flex flex-col h-full relative z-10">
-      {/* HEADER */}
+      {/* ENCABEZADO */}
       <div className="bg-white/40 backdrop-blur-3xl border border-white/60 rounded-[2.5rem] px-8 py-5 flex flex-col md:flex-row items-center justify-between shadow-sm mb-4 no-print shrink-0 relative overflow-hidden">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
               {activeClass.name} 
+              <button onClick={onDeleteClass} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Class"><Trash2 size={22}/></button>
               {isDebug && <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full shadow-sm border border-amber-200">Local Sandbox</span>}
             </h2>
             <div className="flex items-center gap-4 mt-2">
@@ -901,11 +913,11 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         </div>
       </div>
 
-      {/* SPREADSHEET GRID */}
+      {/* CUADRÍCULA DE HOJA DE CÁLCULO */}
       <div className="flex-1 overflow-auto bg-white/40 backdrop-blur-3xl rounded-[3rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] no-print relative">
         <table className="w-full border-collapse table-auto min-w-max">
           <thead className="bg-white/80 backdrop-blur-md sticky top-0 z-20 shadow-sm border-b border-white">
-            {/* Row 1: Field Headers */}
+            {/* Fila 1: Encabezados de Campo */}
             <tr>
               <th className="w-64 p-0 sticky left-0 z-30 bg-white/90 backdrop-blur-md border-b-2 border-r border-slate-200 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-white" onClick={() => handleSort('name')}>
                 <div className="px-6 py-4 flex items-center justify-between h-full">
@@ -935,7 +947,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
               </th>
             </tr>
 
-            {/* Row 2: Activity Headers */}
+            {/* Fila 2: Encabezados de Actividad */}
             <tr className="text-sm">
               <th className="sticky left-0 z-30 bg-white/90 backdrop-blur-md border-b border-r border-slate-200 p-3 text-left align-bottom shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
                  <input type="text" placeholder="+ Add student (Enter)" className="w-full text-sm bg-slate-100 border-none rounded-xl px-4 py-2 focus:bg-white focus:ring-2 focus:ring-slate-300 outline-none font-bold transition-all placeholder:text-slate-400 shadow-inner" value={studentName} onChange={(e) => setStudentName(e.target.value)} onKeyDown={handleAddStudent}/>
@@ -959,7 +971,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                         </th>
                       ))
                     )}
-                    {/* AVG Column for field */}
+                    {/* Columna AVG para campo */}
                     <th className="border-b border-r border-slate-200 p-3 text-center font-black text-sm tracking-widest shadow-inner w-24" style={{backgroundColor: `${fieldStyle.cell}60`, color: fieldStyle.head}}>AVG</th>
                   </React.Fragment>
                 );
@@ -970,39 +982,53 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           </thead>
 
           <tbody>
-            {processedStudents.map((student) => {
+            {processedStudents.map((student, idx) => {
               const finalMark = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
               const isFinalOverridden = activeClass.overrides?.[student.id]?.final !== undefined;
               const { bank: attitudeBank } = getAttitudeData(student.id, activeClass);
               
-              // Count Missing Grades
+              // Contar Notas Faltantes
               let missingCount = 0;
               activeClass.activities.forEach(a => { if (activeClass.grades[`${student.id}_${a.id}`] === undefined || activeClass.grades[`${student.id}_${a.id}`] === '') missingCount++; });
 
               return (
                 <tr key={student.id} className="group">
-                  {/* Student Name */}
+                  {/* Nombre del Estudiante */}
                   <td className="sticky left-0 z-10 bg-white/80 group-hover:bg-white border-b border-r border-white/60 p-0 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.02)] transition-colors backdrop-blur-md">
                     <div className={`flex items-center justify-between px-6 ${cellPad}`}>
-                      <div>
-                        <span className="font-black text-slate-800 block">{student.name}</span>
-                        {missingCount > 0 && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md uppercase">{missingCount} missing</span>}
+                      <div className="flex-1 pr-2">
+                        {editingStudentId === student.id ? (
+                          <input
+                            autoFocus
+                            className="w-full font-black text-slate-800 bg-white/80 border border-slate-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-slate-400"
+                            value={editStudentName}
+                            onChange={e => setEditStudentName(e.target.value)}
+                            onBlur={() => handleRenameStudent(student.id)}
+                            onKeyDown={e => e.key === 'Enter' && handleRenameStudent(student.id)}
+                          />
+                        ) : (
+                          <span className="font-black text-slate-800 block cursor-text flex items-center gap-2" onDoubleClick={() => {setEditingStudentId(student.id); setEditStudentName(student.name);}} title="Double click to rename">
+                            {student.name}
+                            <button onClick={() => {setEditingStudentId(student.id); setEditStudentName(student.name);}} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-slate-600 transition-opacity"><Edit2 size={12}/></button>
+                          </span>
+                        )}
+                        {missingCount > 0 && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md uppercase mt-1 inline-block">{missingCount} missing</span>}
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0">
                         <button onClick={() => window.print()} className="text-slate-300 hover:text-violet-500 hover:bg-violet-50 p-2 rounded-xl transition-all" title="Print Student Report"><FileText size={16} /></button>
                         <button onClick={() => handleDeleteStudent(student.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={16} /></button>
                       </div>
                     </div>
                   </td>
 
-                  {/* Grades */}
+                  {/* Notas */}
                   {FIELDS.map(field => {
                     const acts = activeClass.activities.filter(a => a.field === field);
                     const fieldStyle = PRINT_STYLES[field];
                     const fieldScore = calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
                     const isFieldOverridden = activeClass.overrides?.[student.id]?.[field] !== undefined;
 
-                    // Did attitude modify this field?
+                    // ¿La actitud modificó este campo?
                     const studentLogs = activeClass.attitudeLogs?.[student.id] || [];
                     const fieldAttitude = studentLogs.reduce((acc, log) => (log.field === field && log.fieldDelta) ? acc + log.fieldDelta : acc, 0);
 
@@ -1016,12 +1042,26 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                             const isFailing = globalSettings.highlightFailing && val !== undefined && val !== '' && val < 5;
                             return (
                               <td key={act.id} className={`border-b border-r border-white/60 bg-white/40 group-hover:bg-white/60 transition-colors relative ${cellPad}`}>
-                                <input type="number" min="0" max="100" className={`w-full text-center p-2 rounded-xl border-none focus:ring-2 focus:ring-slate-300 outline-none transition-all font-black text-slate-700 placeholder:text-slate-300 shadow-inner ${isFailing ? 'bg-red-50 text-red-700' : 'bg-slate-100 hover:bg-white focus:bg-white'}`} placeholder="-" value={val ?? ''} onChange={(e) => handleGradeChange(student.id, act.id, e.target.value)} />
+                                <input 
+                                  type="number" min="0" max="100" 
+                                  data-row={idx} data-col={act.id}
+                                  className={`w-full text-center p-2 rounded-xl border-none focus:ring-2 focus:ring-slate-300 outline-none transition-all font-black text-slate-700 placeholder:text-slate-300 shadow-inner ${isFailing ? 'bg-red-50 text-red-700' : 'bg-slate-100 hover:bg-white focus:bg-white'}`} 
+                                  placeholder="-" value={val ?? ''} 
+                                  onChange={(e) => handleGradeChange(student.id, act.id, e.target.value)} 
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                                      e.preventDefault();
+                                      const nextRow = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+                                      const nextInput = document.querySelector(`input[data-row="${nextRow}"][data-col="${act.id}"]`);
+                                      if (nextInput) { nextInput.focus(); nextInput.select(); }
+                                    }
+                                  }}
+                                />
                               </td>
                             )
                           })
                         )}
-                        {/* AVG Cell */}
+                        {/* Celda AVG */}
                         <td 
                           className={`border-b border-r border-white/60 text-center font-black cursor-pointer transition-all relative ${cellPad} ${isFieldOverridden ? 'bg-amber-100/50 hover:bg-amber-100 text-amber-800 shadow-inner' : 'bg-white/70 hover:bg-white text-slate-800'}`}
                           onClick={() => setOverrideModal({ isOpen: true, studentId: student.id, field: field, val: isFieldOverridden ? activeClass.overrides[student.id][field] : fieldScore.toFixed(2) })}
@@ -1041,7 +1081,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                     )
                   })}
 
-                  {/* Final Mark */}
+                  {/* Nota Final */}
                   <td 
                     className={`border-b border-r border-white/60 text-center cursor-pointer transition-all duration-300 relative ${cellPad} ${isFinalOverridden ? 'bg-amber-200/60 hover:bg-amber-300 text-amber-900 shadow-inner' : 'bg-slate-100/80 hover:bg-slate-200 text-slate-900'}`}
                     onClick={() => setOverrideModal({ isOpen: true, studentId: student.id, field: 'final', val: isFinalOverridden ? activeClass.overrides[student.id].final : finalMark.toFixed(2) })}
@@ -1070,7 +1110,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
               )
             })}
             
-            {/* Class Averages Row */}
+            {/* Fila de Promedios de la Clase */}
             {processedStudents.length > 0 && (
               <tr className="sticky bottom-0 z-20">
                 <td className="sticky left-0 bg-white/80 backdrop-blur-md border-t-4 border-white p-4 font-black text-right text-slate-500 uppercase tracking-widest text-xs shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
@@ -1102,7 +1142,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         </table>
       </div>
 
-      {/* --- HIDDEN PRINT SECTION --- */}
+      {/* --- SECCIÓN DE IMPRESIÓN OCULTA --- */}
       <div id="print-section" className="hidden no-print bg-white text-black">
         <div className="mb-4 text-center">
            {globalSettings.schoolName && <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1">{globalSettings.schoolName}</p>}
@@ -1160,7 +1200,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         </div>
       </div>
 
-      {/* MODALS */}
+      {/* MODALES */}
       <AnimatePresence>
         {activityModal.isOpen && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -1285,7 +1325,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
             <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-6xl flex flex-col md:flex-row gap-8 max-h-[90vh]">
               
-              {/* Left Column: AI Assistant */}
+              {/* Columna Izquierda: Asistente IA */}
               <div className="flex-1 flex flex-col gap-4">
                 <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 shrink-0"><div className={`p-2 rounded-xl bg-gradient-to-br ${theme.accentGradient} text-white shadow-sm`}><Wand2 size={24}/></div> AI Assistant</h3>
                 
@@ -1314,7 +1354,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                 </div>
               </div>
 
-              {/* Right Column: Visual Footprint */}
+              {/* Columna Derecha: Huella Visual */}
               <div className="w-full md:w-96 bg-white/40 rounded-[3rem] border border-white/60 p-6 shadow-inner flex flex-col shrink-0">
                 <div className="text-center mb-4 shrink-0">
                   <h4 className="font-black text-xl text-slate-800">{activeClass.students.find(s=>s.id===commentModal.studentId)?.name}</h4>
