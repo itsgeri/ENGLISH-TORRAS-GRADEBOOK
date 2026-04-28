@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveCont
 import { 
   User, LogOut, Plus, Edit2, Trash2, Save, X, BarChart2, 
   MessageSquare, FileText, Settings, Activity, ArrowLeft, ArrowRight,
-  ChevronDown, ChevronRight, Calculator, AlertCircle, Wand2, Undo2, ArrowUpRight, ArrowDownRight,
+  ChevronDown, ChevronRight, AlertCircle, Wand2, Undo2, ArrowUpRight, ArrowDownRight,
   CalendarDays, Calendar, Clock, Home, ImagePlus, Eye, EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence, animate } from 'framer-motion';
@@ -86,18 +86,19 @@ const formatDate = (isoString) => new Date(isoString).toLocaleDateString('en-GB'
 
 // --- ANIMATED NUMBER COMPONENT ---
 function AnimatedNumber({ value, decimals = 1, className }) {
-  const ref = useRef(null);
+  const [displayValue, setDisplayValue] = useState(value);
+  
   useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const controls = animate(parseFloat(node.textContent) || 0, value, {
-      duration: 0.5,
+    const controls = animate(displayValue, value, {
+      duration: 0.6,
       ease: "easeOut",
-      onUpdate(v) { node.textContent = v.toFixed(decimals); }
+      onUpdate: (v) => setDisplayValue(v)
     });
     return () => controls.stop();
-  }, [value, decimals]);
-  return <span ref={ref} className={className}>{Number(value).toFixed(decimals)}</span>;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]); 
+
+  return <span className={className}>{Number(displayValue).toFixed(decimals)}</span>;
 }
 
 const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs, overrides) => {
@@ -262,7 +263,7 @@ export default function App() {
 
 function MainDashboard({ user, isDebug }) {
   const [classes, setClasses] = useState([]);
-  const [activeClassId, setActiveClassId] = useState(null);
+  const [activeClassId, setActiveClassId] = useState('dashboard');
   const [dataLoading, setDataLoading] = useState(true);
   const [globalSettings, setGlobalSettings] = useState({ theme: 'aurora', aiContext: '', schoolName: '', compactMode: false, highlightFailing: true, geminiApiKey: '', profilePicUrl: '' });
   
@@ -298,9 +299,8 @@ function MainDashboard({ user, isDebug }) {
     return () => unsubscribe();
   }, [user.uid, isDebug]);
 
-  // Sincronizar clase activa
   useEffect(() => {
-    if (classes.length > 0 && (!activeClassId || !classes.find(c => c.id === activeClassId))) {
+    if (classes.length > 0 && (!activeClassId || !classes.find(c => c.id === activeClassId)) && activeClassId !== 'dashboard') {
       setActiveClassId(classes[0].id);
     } else if (classes.length === 0 && !dataLoading) {
       setActiveClassId(null);
@@ -323,11 +323,11 @@ function MainDashboard({ user, isDebug }) {
   const handleDeleteClass = async (classId) => {
     if (window.confirm("Are you sure you want to permanently delete this class? This action cannot be undone.")) {
       if (isDebug) {
-        const remaining = classes.filter(c => c.id !== classId);
-        setClasses(remaining);
-        setActiveClassId(remaining.length > 0 ? remaining[0].id : null);
+        setClasses(prev => prev.filter(c => c.id !== classId));
+        setActiveClassId('dashboard');
       } else {
         await deleteDoc(doc(db, 'users', user.uid, 'classes', classId));
+        setActiveClassId('dashboard');
       }
     }
   };
@@ -352,6 +352,13 @@ function MainDashboard({ user, isDebug }) {
         .animate-blob { animation: blob 7s infinite; }
         .animation-delay-2000 { animation-delay: 2s; }
         .animation-delay-4000 { animation-delay: 4s; }
+        
+        /* Ocultar las flechas nativas del input number */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
       `}</style>
 
       {/* Background Blobs */}
@@ -377,6 +384,11 @@ function MainDashboard({ user, isDebug }) {
         </div>
         
         <div className="flex-1 overflow-y-auto py-4 px-4 scrollbar-hide space-y-2">
+          <button onClick={() => setActiveClassId('dashboard')} className={`w-full text-left py-3 rounded-2xl flex items-center transition-all duration-300 group mb-6 ${sidebarOpen ? 'px-4 gap-4' : 'justify-center px-0'} ${activeClassId === 'dashboard' ? `bg-white/80 shadow-sm border border-white` : 'hover:bg-white/50 text-slate-600 border border-transparent'}`}>
+             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${activeClassId === 'dashboard' ? `${theme.iconBg} ${theme.iconText}` : `bg-white/60 group-hover:bg-white`}`}><Home size={18} /></div>
+             {sidebarOpen && <span className="font-bold tracking-wide">Overview</span>}
+          </button>
+
           {sidebarOpen && <div className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 mt-2">My Classes</div>}
           {classes.map(c => (
             <button key={c.id} onClick={() => setActiveClassId(c.id)} className={`w-full text-left py-3 rounded-2xl flex items-center transition-all duration-300 group ${sidebarOpen ? 'px-4 gap-4' : 'justify-center px-0'} ${activeClassId === c.id ? `bg-gradient-to-r ${theme.accentGradient} text-white shadow-lg ${theme.accentHover}` : 'hover:bg-white/80 text-slate-600'}`}>
@@ -417,6 +429,8 @@ function MainDashboard({ user, isDebug }) {
              <div className="w-8 h-8 border-4 border-white border-t-violet-500 rounded-full animate-spin"></div>
              <p className="font-bold tracking-widest uppercase text-xs">Loading data...</p>
            </div>
+        ) : activeClassId === 'dashboard' || (!activeClass && classes.length > 0) ? (
+           <GlobalDashboard classes={classes} theme={theme} />
         ) : activeClass ? (
            <ClassView key={activeClass.id} activeClass={activeClass} userId={user.uid} isDebug={isDebug} globalSettings={globalSettings} theme={theme} setClasses={setClasses} classes={classes} onDeleteClass={() => handleDeleteClass(activeClass.id)} />
         ) : (
@@ -530,6 +544,57 @@ function MainDashboard({ user, isDebug }) {
   );
 }
 
+// --- GLOBAL DASHBOARD COMPONENT ---
+function GlobalDashboard({ classes, theme }) {
+  const allEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return classes.flatMap(c => (c.events || []).map(e => ({...e, className: c.name})))
+                  .filter(e => new Date(e.date) >= today)
+                  .sort((a,b) => new Date(a.date) - new Date(b.date));
+  }, [classes]);
+
+  return (
+    <div className="flex-1 bg-white/40 backdrop-blur-3xl rounded-[3rem] border border-white/60 shadow-sm p-8 flex flex-col h-full overflow-hidden">
+      <div className="mb-8 flex items-center gap-4 border-b border-white pb-6">
+         <div className={`p-4 rounded-[2rem] bg-gradient-to-br ${theme.accentGradient} text-white shadow-lg`}><Home size={32} /></div>
+         <div>
+           <h2 className="text-4xl font-black text-slate-800 tracking-tight">Overview Dashboard</h2>
+           <p className="text-slate-500 font-medium">Welcome back! Here's what's happening across your {classes.length} classes.</p>
+         </div>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto pr-4 space-y-8 scrollbar-hide">
+        <div>
+          <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Calendar size={20} className={theme.accentText}/> Upcoming Events</h3>
+          {allEvents.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {allEvents.map((ev, i) => (
+                <div key={i} className="bg-white/70 p-5 rounded-3xl shadow-sm border border-white hover:shadow-md transition-shadow group flex items-start gap-4">
+                  <div className="bg-slate-100 text-slate-500 font-black p-3 rounded-2xl text-center min-w-[60px] shadow-inner shrink-0 group-hover:bg-slate-200 transition-colors">
+                    <div className="text-xs uppercase tracking-widest">{new Date(ev.date).toLocaleDateString('en-GB', {month:'short'})}</div>
+                    <div className="text-2xl leading-none mt-1 text-slate-800">{new Date(ev.date).getDate()}</div>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-lg truncate" title={ev.title}>{ev.title}</h4>
+                    <p className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1"><User size={14}/> {ev.className}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white/50 p-8 rounded-3xl border border-white/80 text-center shadow-inner">
+               <CalendarDays size={48} className="mx-auto mb-3 text-slate-300"/>
+               <p className="text-slate-500 font-bold">No upcoming events scheduled.</p>
+               <p className="text-sm text-slate-400">Open a class and click "Calendar" to add tests, due dates, or reminders.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setClasses, classes, onDeleteClass }) {
   const [studentName, setStudentName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -541,7 +606,8 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [isEditingClassName, setIsEditingClassName] = useState(false);
   const [editClassName, setEditClassName] = useState(activeClass.name);
 
-  const [activityModal, setActivityModal] = useState({ isOpen: false, field: 'Grammar', name: '', weight: 10 });
+  // Modals
+  const [fieldManager, setFieldManager] = useState({ isOpen: false, field: null, localActs: [] });
   const [attitudeModal, setAttitudeModal] = useState({ isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' });
   const [commentModal, setCommentModal] = useState({ isOpen: false, studentId: null, text: '', aiPrompt: '', aiLanguage: 'English', includeMarks: true });
   const [overrideModal, setOverrideModal] = useState({ isOpen: false, studentId: null, field: null, val: '' });
@@ -631,11 +697,26 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     reader.readAsDataURL(file);
   };
 
-  const handleAddActivity = async () => {
-    if (!activityModal.name.trim()) return;
-    const newActivity = { id: generateId(), field: activityModal.field, name: activityModal.name, weight: Number(activityModal.weight) };
-    await updateClassData({ activities: [...activeClass.activities, newActivity] });
-    setActivityModal({ ...activityModal, isOpen: false, name: '' });
+  // --- Field Manager Functions ---
+  const openFieldManager = (field, createNew = false) => {
+    let currentActs = activeClass.activities.filter(a => a.field === field);
+    if (createNew) {
+      currentActs = [...currentActs, { id: generateId(), field, name: 'New Activity', weight: 10 }];
+    }
+    setFieldManager({ isOpen: true, field, localActs: currentActs });
+  };
+
+  const equalizeLocalWeights = () => {
+    if (fieldManager.localActs.length === 0) return;
+    const eq = Number((100 / fieldManager.localActs.length).toFixed(2));
+    setFieldManager(prev => ({ ...prev, localActs: prev.localActs.map(a => ({ ...a, weight: eq })) }));
+  };
+
+  const handleSaveFieldManager = async () => {
+    const otherActs = activeClass.activities.filter(a => a.field !== fieldManager.field);
+    const updatedActivities = [...otherActs, ...fieldManager.localActs.filter(a => a.name.trim())];
+    await updateClassData({ activities: updatedActivities });
+    setFieldManager({ isOpen: false, field: null, localActs: [] });
   };
 
   const handleDeleteActivity = async (activityId) => {
@@ -902,13 +983,15 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                 const acts = activeClass.activities.filter(a => a.field === field);
                 const fieldStyle = PRINT_STYLES[field];
                 return (
-                  <th key={field} colSpan={Math.max(1, acts.length) + 1} className="border-b-2 border-r border-slate-200 p-3 text-center group transition-colors hover:bg-white" style={{backgroundColor: `${fieldStyle.cell}30`}}>
+                  <th key={field} colSpan={Math.max(1, acts.length) + 1} className="border-b-2 border-r border-slate-200 p-3 text-center group transition-colors hover:bg-white relative" style={{backgroundColor: `${fieldStyle.cell}30`}}>
                     <div className="flex items-center justify-center gap-3">
                       <span className="font-black text-lg tracking-wide" style={{color: fieldStyle.head}}>{field}</span>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setActivityModal({ isOpen: true, field, name: '', weight: 10 })} className="p-1.5 hover:bg-white rounded-xl shadow-sm text-slate-600 transition-all"><Plus size={16} /></button>
-                        {acts.length > 0 && <button onClick={() => handleEqualizeWeights(field)} className="p-1.5 hover:bg-white rounded-xl shadow-sm text-slate-600 transition-all" title="Equalize Weights"><Calculator size={16} /></button>}
-                      </div>
+                    </div>
+                    {/* Botones Flotantes de Field Manager */}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 z-10">
+                      {acts.length > 0 && <button onClick={() => handleEqualizeWeights(field)} className="text-[9px] font-black uppercase bg-slate-800 text-white px-2 py-1 rounded shadow-sm hover:bg-black transition-colors">Equalize</button>}
+                      {acts.length > 0 && <button onClick={() => openFieldManager(field, false)} className="text-[9px] font-black uppercase bg-white text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-slate-50 transition-colors border border-slate-200">Edit</button>}
+                      <button onClick={() => openFieldManager(field, true)} className="text-[9px] font-black uppercase bg-blue-100 text-blue-600 px-2 py-1 rounded shadow-sm hover:bg-blue-200 transition-colors">+ Add</button>
                     </div>
                   </th>
                 );
@@ -934,8 +1017,9 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                         <th key={act.id} className="border-b border-r border-slate-200 p-3 text-center font-normal min-w-[110px] relative group bg-white/50 hover:bg-white transition-colors">
                           <div className="font-bold text-slate-700 truncate px-2">{act.name}</div>
                           <div className="text-[10px] font-black mt-1 bg-white inline-block px-2 py-0.5 rounded-full shadow-sm text-slate-500">{act.weight}%</div>
-                          <div className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 flex flex-col gap-1">
-                            <button onClick={() => handleDeleteActivity(act.id)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-lg transition-all"><Trash2 size={12}/></button>
+                          <div className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 flex flex-col gap-1 z-10">
+                            <button onClick={() => openFieldManager(act.field, false)} className="text-slate-400 hover:text-blue-500 hover:bg-blue-50 p-1 rounded-lg transition-all" title="Edit Activity"><Edit2 size={12}/></button>
+                            <button onClick={() => handleDeleteActivity(act.id)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-lg transition-all" title="Delete"><Trash2 size={12}/></button>
                             <button onClick={() => handleBulkFill(act.id)} className="text-slate-400 hover:text-violet-500 hover:bg-violet-50 p-1 rounded-lg transition-all" title="Fill Empty"><Wand2 size={12}/></button>
                           </div>
                         </th>
@@ -1152,218 +1236,268 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Field Manager (Activities & Weights Pie Chart) */}
       <AnimatePresence>
-        {activityModal.isOpen && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-            <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-sm">
-              <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><div className={`p-2 rounded-xl ${theme.iconBg} ${theme.iconText}`}><Plus size={24}/></div> Add Activity</h3>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-2 ml-1">Activity Name</label>
-                  <input type="text" autoFocus value={activityModal.name} onChange={e => setActivityModal({...activityModal, name: e.target.value})} className={`w-full border border-white/60 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold ${theme.accentRing} focus:ring-4 placeholder:text-slate-400`} placeholder="e.g. Unit 1 Test"/>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-4 ml-1 flex justify-between">
-                    Weight (%) in {activityModal.field}
-                    <span className={`text-xl font-black ${theme.accentText}`}>{activityModal.weight}%</span>
-                  </label>
-                  <input type="range" min="1" max="100" value={activityModal.weight} onChange={e => setActivityModal({...activityModal, weight: e.target.value})} className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-800" />
-                  <p className="text-xs text-slate-400 mt-4 leading-relaxed font-medium">Weights are calculated proportionally. Use the calculator icon in the header to auto-equalize weights.</p>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button onClick={() => setActivityModal({isOpen: false, field: '', name: '', weight: 0})} className="px-6 py-3.5 text-slate-600 font-bold hover:bg-white/60 rounded-2xl transition-colors">Cancel</button>
-                <button onClick={handleAddActivity} className={`px-6 py-3.5 bg-gradient-to-r ${theme.accentGradient} text-white font-black tracking-wide rounded-2xl shadow-xl transition-all ${theme.accentHover}`}>Add Activity</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {attitudeModal.isOpen && (
+        {fieldManager.isOpen && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
             <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-4xl flex flex-col md:flex-row gap-8 max-h-[90vh]">
-               <div className="flex-[1.5] flex flex-col">
-                 <h3 className="text-3xl font-black text-slate-800 mb-2 flex items-center gap-3"><div className="bg-emerald-100 text-emerald-600 p-3 rounded-2xl shadow-sm"><Activity size={28}/></div> Attitude Ledger</h3>
-                 <p className="text-sm font-bold text-slate-500 mb-6">Managing points for: <span className="text-slate-800">{activeClass.students.find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
+              <div className="flex-[1.5] flex flex-col">
+                 <h3 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-3"><div className={`p-2 rounded-xl ${theme.iconBg} ${theme.iconText}`}><BarChart2 size={24}/></div> {fieldManager.field} Activities</h3>
+                 <p className="text-sm font-bold text-slate-500 mb-6">Manage activities and distribute weights visually.</p>
                  
-                 <div className="space-y-4 flex-1 overflow-y-auto pr-2 scrollbar-hide">
-                   <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm flex flex-col gap-3">
-                     <h4 className="font-black text-slate-700 flex items-center gap-2 text-sm"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> 1. Record to Bank</h4>
-                     <div className="flex gap-3">
-                       <div className="flex items-center bg-white rounded-2xl border border-white/80 p-1 shadow-inner shrink-0">
-                         <button onClick={() => setAttitudeModal({...attitudeModal, val: attitudeModal.val - 0.1})} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-black text-lg transition-all">-</button>
-                         <span className={`w-14 text-center font-black text-lg ${attitudeModal.val > 0 ? 'text-emerald-600' : attitudeModal.val < 0 ? 'text-red-600' : 'text-slate-400'}`}>{attitudeModal.val > 0 ? '+' : ''}{attitudeModal.val.toFixed(1)}</span>
-                         <button onClick={() => setAttitudeModal({...attitudeModal, val: attitudeModal.val + 0.1})} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-black text-lg transition-all">+</button>
+                 <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-hide min-h-[250px]">
+                   {fieldManager.localActs.map((act, index) => (
+                     <div key={act.id} className="bg-white/50 p-4 rounded-[1.5rem] border border-white/60 shadow-sm flex flex-col gap-3">
+                       <div className="flex items-center justify-between gap-3">
+                         <input type="text" value={act.name} onChange={e => {
+                           const newActs = [...fieldManager.localActs];
+                           newActs[index].name = e.target.value;
+                           setFieldManager({...fieldManager, localActs: newActs});
+                         }} className={`flex-1 border border-white/80 rounded-xl px-3 py-2 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold text-sm ${theme.accentRing} focus:ring-4`} placeholder="Activity Name"/>
+                         <button onClick={() => {
+                           setFieldManager({...fieldManager, localActs: fieldManager.localActs.filter(a => a.id !== act.id)});
+                         }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all"><Trash2 size={16}/></button>
                        </div>
-                       <input type="text" placeholder="Reason (e.g., Great effort)" value={attitudeModal.reason} onChange={e => setAttitudeModal({...attitudeModal, reason: e.target.value})} className={`w-full border border-white/80 rounded-2xl px-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium placeholder:text-slate-400 ${theme.accentRing} focus:ring-4`} onKeyDown={e => e.key === 'Enter' && handleAddToBank()}/>
-                     </div>
-                     <button onClick={handleAddToBank} className="w-full py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-2xl shadow-xl transition-all tracking-wide">Add to Bank</button>
-                   </div>
-
-                   <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm flex flex-col gap-3">
-                     <h4 className="font-black text-slate-700 flex items-center gap-2 text-sm"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> 2. Apply Bank Points to Grade</h4>
-                     <div className="flex gap-3">
-                       <div className="flex items-center bg-white rounded-2xl border border-white/80 p-1 shadow-inner shrink-0">
-                         <button onClick={() => setAttitudeModal({...attitudeModal, transferVal: attitudeModal.transferVal - 0.1})} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-black text-lg transition-all">-</button>
-                         <span className={`w-14 text-center font-black text-lg text-indigo-600`}>{attitudeModal.transferVal > 0 ? '+' : ''}{attitudeModal.transferVal.toFixed(1)}</span>
-                         <button onClick={() => setAttitudeModal({...attitudeModal, transferVal: attitudeModal.transferVal + 0.1})} className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-500 hover:text-white font-black text-lg transition-all">+</button>
+                       <div className="flex items-center gap-3">
+                         <input type="range" min="1" max="100" value={act.weight} onChange={e => {
+                           const newActs = [...fieldManager.localActs];
+                           newActs[index].weight = Number(e.target.value);
+                           setFieldManager({...fieldManager, localActs: newActs});
+                         }} className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-800" />
+                         <span className="font-black text-slate-700 w-12 text-right">{act.weight}%</span>
                        </div>
-                       <select value={attitudeModal.transferField} onChange={e => setAttitudeModal({...attitudeModal, transferField: e.target.value})} className={`w-full border border-white/80 rounded-2xl px-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold text-slate-700 ${theme.accentRing} focus:ring-4`}>
-                         {FIELDS.map(f => <option key={f} value={f}>Apply to {f}</option>)}
-                       </select>
                      </div>
-                     <button onClick={handleTransferFromBank} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-xl transition-all tracking-wide">Deduct from Bank & Apply to Grade</button>
-                   </div>
+                   ))}
+                   {fieldManager.localActs.length === 0 && <p className="text-sm text-slate-400 italic text-center py-8">No activities. Add one below!</p>}
                  </div>
-               </div>
 
-               <div className="w-full md:w-80 flex flex-col gap-4">
-                  <div className="bg-emerald-50/80 rounded-[2.5rem] border border-emerald-100 p-8 flex flex-col items-center justify-center shadow-sm shrink-0 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-200/50 rounded-full mix-blend-multiply blur-2xl"></div>
-                    <span className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-2 relative z-10">Available Bank</span>
-                    <span className="text-6xl font-black text-emerald-500 relative z-10">{(() => { const {bank} = getAttitudeData(attitudeModal.studentId, activeClass); return bank > 0 ? `+${bank.toFixed(1)}` : bank.toFixed(1); })()}</span>
-                  </div>
-                  <div className="flex-1 bg-white/40 rounded-[2.5rem] border border-white/60 p-5 overflow-y-auto shadow-inner scrollbar-hide flex flex-col">
-                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 sticky top-0 bg-white/90 backdrop-blur-md p-2 rounded-xl z-10 text-center shrink-0">Ledger History</h4>
-                    {(() => {
-                      const logs = activeClass.attitudeLogs?.[attitudeModal.studentId] || [];
-                      if (logs.length === 0) return <p className="text-sm text-slate-400 font-medium italic text-center mt-4">No records yet.</p>;
-                      return <div className="space-y-2 flex-1 overflow-y-auto pr-1 scrollbar-hide">
-                        {logs.map(log => {
-                          const isTransfer = log.bankDelta !== null && log.fieldDelta !== null && log.field !== null;
-                          const displayVal = isTransfer ? log.fieldDelta : (log.bankDelta || log.fieldDelta);
-                          const displayColor = displayVal > 0 ? 'text-emerald-600' : 'text-red-600';
-
-                          return (
-                            <div key={log.id} className="text-xs font-medium text-slate-600 bg-white/80 p-3 rounded-2xl border border-white flex items-center justify-between gap-2 shadow-sm group">
-                              <div className="flex items-center gap-3">
-                                <div className={`font-black w-8 text-right shrink-0 text-sm ${displayColor}`}>
-                                  {displayVal > 0 ? '+' : ''}{Number(displayVal).toFixed(1)}
-                                </div>
-                                <div>
-                                  <span className="font-bold text-slate-800 block truncate max-w-[120px]">{log.reason}</span>
-                                  <span className="text-[10px] text-slate-500">{isTransfer ? `Applied to ${log.field}` : (log.field ? `Applied to ${log.field}` : 'Banked')} • {formatDate(log.date).split(',')[0]}</span>
-                                </div>
-                              </div>
-                              <button onClick={() => handleDeleteLog(attitudeModal.studentId, log.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Undo this entry"><Undo2 size={14}/></button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    })()}
-                  </div>
-                  <button onClick={() => setAttitudeModal({isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar'})} className="w-full py-4 bg-white hover:bg-slate-50 text-slate-700 font-black rounded-2xl shadow-sm border border-slate-200 transition-all shrink-0">Close Ledger</button>
-               </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {overrideModal.isOpen && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-            <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-sm">
-              <h3 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-3"><div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Edit2 size={24}/></div> Manual Override</h3>
-              <p className="text-sm font-medium text-slate-500 mb-6 leading-relaxed">Round the <b className="text-amber-600 uppercase">{overrideModal.field}</b> average. Leave empty to restore auto-calculation.</p>
-              <div className="relative mb-8">
-                <input type="number" step="0.1" autoFocus value={overrideModal.val} onChange={e => setOverrideModal({...overrideModal, val: e.target.value})} className={`w-full text-center text-5xl font-black text-slate-800 border border-white/60 rounded-[2rem] p-6 focus:bg-white bg-white/50 outline-none transition-all shadow-inner focus:ring-4 focus:ring-amber-500/30 placeholder:text-slate-300`} placeholder="Auto"/>
+                 <div className="mt-4 flex gap-3 shrink-0">
+                   <button onClick={() => {
+                     setFieldManager({
+                       ...fieldManager, 
+                       localActs: [...fieldManager.localActs, { id: generateId(), field: fieldManager.field, name: 'New Activity', weight: 10 }]
+                     });
+                   }} className="flex-1 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold border border-slate-200 rounded-2xl transition-all shadow-sm text-sm flex items-center justify-center gap-2"><Plus size={16}/> Add Activity</button>
+                   <button onClick={equalizeLocalWeights} className="flex-1 py-3 bg-slate-800 hover:bg-black text-white font-bold rounded-2xl transition-all shadow-sm text-sm">Equalize Weights</button>
+                 </div>
               </div>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setOverrideModal({isOpen: false, studentId: null, field: null, val: ''})} className="flex-1 py-3.5 text-slate-600 font-bold hover:bg-white/60 rounded-2xl transition-colors">Cancel</button>
-                <button onClick={handleSaveOverride} className="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black rounded-2xl transition-all shadow-xl shadow-amber-500/30 tracking-wide">Apply</button>
+              
+              <div className="w-full md:w-80 bg-white/40 rounded-[2.5rem] border border-white/60 p-6 shadow-inner flex flex-col shrink-0 justify-center items-center">
+                 <h4 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4">Weight Distribution</h4>
+                 <div className="w-full h-64 relative">
+                   {fieldManager.localActs.length > 0 ? (
+                     <ResponsiveContainer width="100%" height="100%">
+                       <PieChart>
+                         <Pie data={fieldManager.localActs} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3} dataKey="weight">
+                           {fieldManager.localActs.map((entry, idx) => <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />)}
+                         </Pie>
+                         <RechartsTooltip formatter={(value) => [`${value}% weight`, 'Weight']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}/>
+                       </PieChart>
+                     </ResponsiveContainer>
+                   ) : (
+                     <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-medium">No Data</div>
+                   )}
+                 </div>
+                 <div className="w-full mt-8 flex flex-col gap-3">
+                   <button onClick={() => setFieldManager({isOpen: false, field: null, localActs: []})} className="w-full py-3.5 text-slate-600 font-bold hover:bg-white/60 rounded-2xl transition-colors">Cancel</button>
+                   <button onClick={handleSaveFieldManager} className={`w-full py-3.5 bg-gradient-to-r ${theme.accentGradient} text-white font-black tracking-wide rounded-2xl shadow-xl transition-all ${theme.accentHover}`}>Save Activities</button>
+                 </div>
               </div>
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
 
-        {commentModal.isOpen && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-            <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-6xl flex flex-col lg:flex-row gap-8 max-h-[90vh]">
-              <div className="flex-[1.2] flex flex-col gap-4">
-                <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 shrink-0"><div className={`p-2 rounded-xl bg-gradient-to-br ${theme.accentGradient} text-white shadow-sm`}><Wand2 size={24}/></div> AI Assistant</h3>
-                <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-bold text-slate-700">1. Language</label>
-                    <select value={commentModal.aiLanguage} onChange={e => setCommentModal({...commentModal, aiLanguage: e.target.value})} className={`bg-white border border-white/80 rounded-xl px-3 py-1.5 text-sm font-bold text-slate-600 outline-none shadow-sm ${theme.accentRing} focus:ring-2`}>
-                      <option>English</option><option>Spanish</option><option>Catalan</option>
-                    </select>
-                  </div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2 mt-4">2. Quick Notes</label>
-                  <textarea value={commentModal.aiPrompt} onChange={e => setCommentModal({...commentModal, aiPrompt: e.target.value})} className={`w-full h-20 border border-white/80 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 placeholder:text-slate-400`} placeholder="E.g. Great effort this term..."/>
-                  
-                  <label className="flex items-center gap-3 p-3 bg-white/60 rounded-xl border border-white/80 cursor-pointer hover:bg-white transition-colors mt-3">
-                    <input type="checkbox" checked={commentModal.includeMarks} onChange={e => setCommentModal({...commentModal, includeMarks: e.target.checked})} className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-gray-300"/>
-                    <span className="text-sm font-bold text-slate-700">Include exact grades & stats in AI prompt</span>
-                  </label>
-
-                  <button disabled={isGenerating} className={`w-full mt-3 py-3 bg-slate-900 hover:bg-black text-white font-black tracking-wide rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70`} onClick={handleGenerateDraft}>
-                    {isGenerating ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : 'Generate Magic Draft'}
-                  </button>
-                </div>
-                <div className="flex-1 flex flex-col min-h-[150px]">
-                  <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">3. Final Official Comment</label>
-                  <textarea value={commentModal.text} onChange={e => setCommentModal({...commentModal, text: e.target.value})} className={`w-full flex-1 border border-white/80 rounded-2xl p-5 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 leading-relaxed text-slate-700`} placeholder="The final comment that will appear on the PDF report goes here..."/>
-                </div>
-                <div className="flex justify-end gap-3 shrink-0 pt-2">
-                  <button onClick={() => setCommentModal({isOpen: false, studentId: null, text: '', aiPrompt: '', aiLanguage: 'English', includeMarks: true})} className="px-8 py-4 text-slate-600 font-bold hover:bg-white/60 rounded-2xl transition-colors">Cancel</button>
-                  <button onClick={handleSaveComment} className={`px-8 py-4 bg-gradient-to-r ${theme.accentGradient} text-white font-black tracking-wide rounded-2xl transition-all shadow-xl ${theme.accentHover} flex items-center gap-2`}><Save size={20}/> Save Official Comment</button>
-                </div>
-              </div>
-              <div className="flex-1 bg-white/40 rounded-[3rem] border border-white/60 p-6 shadow-inner flex flex-col shrink-0">
-                <div className="text-center mb-4 shrink-0">
-                  <h4 className="font-black text-xl text-slate-800">{activeClass.students.find(s=>s.id===commentModal.studentId)?.name}</h4>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Academic Footprint Overview</span>
-                </div>
-                <div className="flex-1 min-h-[200px] relative">
-                  {(() => {
-                    const radarData = FIELDS.map(f => {
-                       const score = calculateFieldScore(commentModal.studentId, f, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
-                       return { subject: f, score: Math.min(10, score) * 10, fullMark: 100 };
-                    });
-                    return (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                          <PolarGrid stroke="#e2e8f0" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 'bold' }} />
-                          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                          <Radar name="Student" dataKey="score" stroke={theme.accentText.replace('text-', '')} fill={theme.blob1.replace('bg-', '')} fillOpacity={0.5} />
-                          <RechartsTooltip formatter={(value) => [(value / 10).toFixed(1), 'Score']} contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}/>
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    )
-                  })()}
-                </div>
-                <div className="bg-white/60 p-4 rounded-3xl mt-4 shrink-0 border border-white shadow-sm flex flex-col gap-4">
-                   <div className="flex justify-between items-center bg-white/50 p-3 rounded-2xl shadow-inner">
-                     <span className="text-xs font-bold text-slate-500">Current Final Average</span>
-                     <span className="text-xl font-black text-slate-800">{calculateFinalMark(commentModal.studentId, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(2)}</span>
-                   </div>
-                   <div className="flex-1 max-h-[150px] overflow-y-auto scrollbar-hide">
-                     <div className="flex justify-between items-center mb-2 px-1">
-                       <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Attitude Ledger</span>
-                       <span className={`text-sm font-black ${getAttitudeData(commentModal.studentId, activeClass).bank > 0 ? 'text-emerald-500' : getAttitudeData(commentModal.studentId, activeClass).bank < 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                         Bank: {getAttitudeData(commentModal.studentId, activeClass).bank > 0 ? '+' : ''}{getAttitudeData(commentModal.studentId, activeClass).bank.toFixed(1)}
+      {/* Modal de Actitud */}
+      {attitudeModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-[450px] modal-enter border border-slate-100">
+             <div className="flex items-center gap-3 mb-2 text-purple-700">
+               <div className="bg-purple-100 p-2 rounded-xl"><Activity size={24}/></div>
+               <h3 className="text-2xl font-bold">Attitude Adjustments</h3>
+             </div>
+             <p className="text-sm text-slate-500 mb-6 font-medium">Modifying scores for: <span className="text-slate-800 font-bold">{activeClass.students.find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
+             
+             <div className="space-y-3">
+               {FIELDS.map(field => {
+                 const currentVal = activeClass.attitude[attitudeModal.studentId]?.[field] || 0;
+                 return (
+                   <div key={field} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200/60 hover:border-slate-300 transition-colors">
+                     <span className="font-semibold text-slate-700">{field}</span>
+                     <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-slate-100">
+                       <button onClick={() => handleAttitudeChange(attitudeModal.studentId, field, currentVal - 0.5)} className="w-10 h-10 rounded-lg bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-bold text-xl transition-all flex items-center justify-center">-</button>
+                       <span className={`w-12 text-center font-black text-lg ${currentVal > 0 ? 'text-emerald-600' : currentVal < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                         {currentVal > 0 ? '+' : ''}{currentVal}
                        </span>
-                     </div>
-                     <div className="space-y-2">
-                       {getAttitudeData(commentModal.studentId, activeClass).logs.slice(0,4).map(log => {
-                          const displayVal = (log.bankDelta !== null && log.fieldDelta !== null && log.field !== null) ? log.fieldDelta : (log.bankDelta || log.fieldDelta);
-                          const color = displayVal > 0 ? 'text-emerald-600' : 'text-red-600';
-                          return (
-                            <div key={log.id} className="text-xs font-medium bg-white p-2.5 rounded-xl border border-white shadow-sm flex items-center gap-2">
-                              <span className={`font-black w-8 text-right ${color}`}>{displayVal > 0 ? '+' : ''}{Number(displayVal).toFixed(1)}</span>
-                              <span className="truncate text-slate-700" title={log.reason}>{log.reason}</span>
-                            </div>
-                          )
-                       })}
-                       {getAttitudeData(commentModal.studentId, activeClass).logs.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">No records found.</p>}
+                       <button onClick={() => handleAttitudeChange(attitudeModal.studentId, field, currentVal + 0.5)} className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-bold text-xl transition-all flex items-center justify-center">+</button>
                      </div>
                    </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+                 )
+               })}
+             </div>
+             <div className="mt-8 flex justify-end">
+               <button onClick={() => setAttitudeModal({isOpen: false, studentId: null})} className="px-6 py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-xl transition-all w-full shadow-lg shadow-slate-900/20">Done</button>
+             </div>
+          </div>
+        </div>
+      )}
 
+      {/* Modal de Sobreescritura Manual */}
+      {overrideModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-[380px] modal-enter border-t-8 border-t-amber-400">
+            <div className="flex items-center gap-3 mb-3 text-amber-600">
+              <div className="bg-amber-50 p-2 rounded-xl"><Edit2 size={24}/></div>
+              <h3 className="text-2xl font-bold text-slate-800">Manual Override</h3>
+            </div>
+            <p className="text-sm text-slate-500 mb-6 font-medium">Round the final mark up or down. Leave empty to restore the auto-calculated average.</p>
+            
+            <div className="relative mb-8">
+              <input 
+                type="number" step="0.1" autoFocus
+                value={overrideModal.val} 
+                onChange={e => setOverrideModal({...overrideModal, val: e.target.value})} 
+                className="w-full text-center text-4xl font-black text-slate-800 border-2 border-slate-200 rounded-2xl p-6 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 outline-none transition-all bg-slate-50 focus:bg-white placeholder:text-slate-300"
+                placeholder="Auto"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setOverrideModal({isOpen: false, studentId: null, val: ''})} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+              <button onClick={handleSaveOverride} className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-amber-500/30">Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Comentarios */}
+      {commentModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 fade-enter">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-[600px] modal-enter border border-slate-100">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                  <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><MessageSquare size={24}/></div>
+                  Report Comments
+                </h3>
+                <p className="text-slate-500 mt-2 font-medium">Writing comments for: <span className="text-slate-800 font-bold">{activeClass.students.find(s=>s.id===commentModal.studentId)?.name}</span></p>
+              </div>
+              <button onClick={() => setCommentModal({isOpen: false, studentId: null, text: ''})} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors"><X size={24}/></button>
+            </div>
+            
+            <textarea 
+              value={commentModal.text}
+              onChange={e => setCommentModal({...commentModal, text: e.target.value})}
+              className="w-full h-64 border-2 border-slate-200 rounded-2xl p-5 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none resize-none transition-all bg-slate-50 focus:bg-white text-slate-700 leading-relaxed"
+              placeholder="Write detailed performance comments here. This will be included in the PDF export..."
+            />
+            
+            <div className="flex justify-end mt-6">
+              <button onClick={handleSaveComment} className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center gap-2">
+                <Save size={20}/> Save Comments
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gráficos (Dashboard) */}
+      {chartsOpen && (
+        <div className="fixed inset-0 bg-slate-100/95 backdrop-blur-md z-50 flex flex-col fade-enter">
+          <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shadow-sm">
+            <h2 className="text-2xl font-black flex items-center gap-3 text-slate-800">
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><BarChart2 size={28}/></div>
+              Weight Distributions
+            </h2>
+            <button onClick={() => setChartsOpen(false)} className="p-3 bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all font-bold flex items-center gap-2">
+              <X size={20}/> Close Dashboard
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-auto p-8">
+            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {FIELDS.map(field => {
+                const acts = activeClass.activities.filter(a => a.field === field);
+                const totalW = acts.reduce((acc, curr) => acc + curr.weight, 0);
+                const data = acts.map(a => ({ name: a.name, value: a.weight }));
+
+                return (
+                  <div key={field} className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col h-[380px] modal-enter">
+                    <div className="text-center mb-4">
+                      <h3 className="font-black text-xl text-slate-800 tracking-wide">{field}</h3>
+                      <p className="text-sm font-medium text-slate-400 mt-1 uppercase tracking-wider">Weight Breakdown</p>
+                    </div>
+                    {data.length > 0 ? (
+                      <div className="flex-1 relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={data}
+                              cx="50%" cy="45%"
+                              innerRadius={65} outerRadius={90}
+                              paddingAngle={5}
+                              dataKey="value"
+                              stroke="none"
+                            >
+                              {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip 
+                              formatter={(value) => [`${value}% weight`, 'Weight']} 
+                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
+                            />
+                            <Legend verticalAlign="bottom" height={36} iconType="circle"/>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 m-4">
+                        <PieChart size={32} className="mb-2 opacity-20"/>
+                        <span className="font-medium">No activities added</span>
+                      </div>
+                    )}
+                    <div className="text-center text-sm font-bold text-slate-600 bg-slate-50 py-2 rounded-xl mt-2">
+                      Total Points in {field}: <span className="text-indigo-600">{totalW}</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Distribución Global */}
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-3xl shadow-xl shadow-indigo-500/30 flex flex-col h-[380px] modal-enter text-white">
+                 <div className="text-center mb-2">
+                   <h3 className="font-black text-xl tracking-wide">Global Distribution</h3>
+                   <p className="text-sm font-medium text-indigo-100 mt-1 uppercase tracking-wider">Final Average</p>
+                 </div>
+                 <p className="text-sm text-center text-indigo-100/80 mb-4 px-4 font-medium">The final mark averages the 5 fields equally (20% each).</p>
+                 <div className="flex-1 relative filter drop-shadow-lg">
+                   <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={FIELDS.map(f => ({name: f, value: 20}))}
+                          cx="50%" cy="45%"
+                          innerRadius={65} outerRadius={90}
+                          paddingAngle={2}
+                          dataKey="value"
+                          stroke="rgba(255,255,255,0.2)"
+                          strokeWidth={2}
+                        >
+                          {FIELDS.map((f, index) => <Cell key={`global-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value) => [`${value}% of Final Grade`, 'Global Weight']}
+                          contentStyle={{ borderRadius: '12px', border: 'none', color: '#1e293b' }} 
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calendario */}
+      <AnimatePresence>
         {calendarOpen && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
             <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-5xl flex flex-col md:flex-row gap-8 max-h-[90vh]">
