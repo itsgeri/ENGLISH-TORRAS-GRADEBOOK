@@ -101,7 +101,8 @@ function AnimatedNumber({ value, decimals = 1, className }) {
   return <span className={className}>{Number(displayValue).toFixed(decimals)}</span>;
 }
 
-const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs, overrides) => {
+// Fallbacks de seguridad (activities=[], grades={}, etc.) para evitar crasheos si faltan datos
+const calculateFieldScore = (studentId, field, activities = [], grades = {}, attitudeLogs = {}, overrides = {}) => {
   if (overrides?.[studentId]?.[field] !== undefined) return Number(overrides[studentId][field]);
   const fieldActivities = activities.filter(a => a.field === field);
   if (fieldActivities.length === 0) return 0;
@@ -118,7 +119,7 @@ const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs,
   return Math.max(0, average + fieldAttitude);
 };
 
-const calculateFinalMark = (studentId, activities, grades, attitudeLogs, overrides) => {
+const calculateFinalMark = (studentId, activities = [], grades = {}, attitudeLogs = {}, overrides = {}) => {
   if (overrides?.[studentId]?.final !== undefined) return Number(overrides[studentId].final);
   let totalScore = 0, activeFields = 0;
   FIELDS.forEach(field => {
@@ -603,8 +604,17 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editStudentName, setEditStudentName] = useState('');
   
+  // EXTRAER DATOS CON FALLBACKS SEGUROS PARA EVITAR CRASHES:
+  const students = activeClass?.students || [];
+  const activities = activeClass?.activities || [];
+  const grades = activeClass?.grades || {};
+  const attitudeLogs = activeClass?.attitudeLogs || {};
+  const overrides = activeClass?.overrides || {};
+  const events = activeClass?.events || [];
+  const schedule = activeClass?.schedule || [];
+
   const [isEditingClassName, setIsEditingClassName] = useState(false);
-  const [editClassName, setEditClassName] = useState(activeClass.name);
+  const [editClassName, setEditClassName] = useState(activeClass?.name || '');
 
   // Modals
   const [fieldManager, setFieldManager] = useState({ isOpen: false, field: null, localActs: [] });
@@ -647,20 +657,20 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const handleAddStudent = async (e) => {
     if (e.key === 'Enter' && studentName.trim()) {
       const newStudent = { id: generateId(), name: studentName.trim(), comments: '', avatar: '' };
-      await updateClassData({ students: [...activeClass.students, newStudent] });
+      await updateClassData({ students: [...students, newStudent] });
       setStudentName('');
     }
   };
 
   const handleDeleteStudent = async (studentId) => {
     if(window.confirm("Remove this student completely?")) {
-      await updateClassData({ students: activeClass.students.filter(s => s.id !== studentId) });
+      await updateClassData({ students: students.filter(s => s.id !== studentId) });
     }
   };
 
   const handleRenameStudent = async (studentId) => {
-    if (editStudentName.trim() && editStudentName !== activeClass.students.find(s => s.id === studentId)?.name) {
-      const updated = activeClass.students.map(s => s.id === studentId ? { ...s, name: editStudentName.trim() } : s);
+    if (editStudentName.trim() && editStudentName !== students.find(s => s.id === studentId)?.name) {
+      const updated = students.map(s => s.id === studentId ? { ...s, name: editStudentName.trim() } : s);
       await updateClassData({ students: updated });
     }
     setEditingStudentId(null);
@@ -687,7 +697,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         canvas.width = width; canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const updatedStudents = activeClass.students.map(s => s.id === uploadStudentId ? { ...s, avatar: dataUrl } : s);
+        const updatedStudents = students.map(s => s.id === uploadStudentId ? { ...s, avatar: dataUrl } : s);
         await updateClassData({ students: updatedStudents });
         setUploadStudentId(null);
         e.target.value = '';
@@ -697,9 +707,8 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     reader.readAsDataURL(file);
   };
 
-  // --- Field Manager Functions ---
   const openFieldManager = (field, createNew = false) => {
-    let currentActs = activeClass.activities.filter(a => a.field === field);
+    let currentActs = activities.filter(a => a.field === field);
     if (createNew) {
       currentActs = [...currentActs, { id: generateId(), field, name: 'New Activity', weight: 10 }];
     }
@@ -713,7 +722,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   };
 
   const handleSaveFieldManager = async () => {
-    const otherActs = activeClass.activities.filter(a => a.field !== fieldManager.field);
+    const otherActs = activities.filter(a => a.field !== fieldManager.field);
     const updatedActivities = [...otherActs, ...fieldManager.localActs.filter(a => a.name.trim())];
     await updateClassData({ activities: updatedActivities });
     setFieldManager({ isOpen: false, field: null, localActs: [] });
@@ -721,15 +730,15 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 
   const handleDeleteActivity = async (activityId) => {
     if(window.confirm("Delete activity and all its grades?")) {
-      await updateClassData({ activities: activeClass.activities.filter(a => a.id !== activityId) });
+      await updateClassData({ activities: activities.filter(a => a.id !== activityId) });
     }
   };
 
   const handleEqualizeWeights = async (field) => {
-    const fieldActivities = activeClass.activities.filter(a => a.field === field);
+    const fieldActivities = activities.filter(a => a.field === field);
     if (fieldActivities.length === 0) return;
     const equalWeight = Number((100 / fieldActivities.length).toFixed(2));
-    const updatedActivities = activeClass.activities.map(a => a.field === field ? { ...a, weight: equalWeight } : a);
+    const updatedActivities = activities.map(a => a.field === field ? { ...a, weight: equalWeight } : a);
     await updateClassData({ activities: updatedActivities });
   };
 
@@ -738,8 +747,8 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     if (val === null || val.trim() === '') return;
     const numVal = Number(val);
     if (isNaN(numVal)) return;
-    const newGrades = { ...activeClass.grades };
-    activeClass.students.forEach(s => {
+    const newGrades = { ...grades };
+    students.forEach(s => {
       const key = `${s.id}_${activityId}`;
       if (newGrades[key] === undefined || newGrades[key] === '') newGrades[key] = numVal;
     });
@@ -748,7 +757,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 
   const handleGradeChange = (studentId, activityId, value) => {
     const numVal = value === '' ? '' : Number(value);
-    updateClassData({ grades: { ...activeClass.grades, [`${studentId}_${activityId}`]: numVal } });
+    updateClassData({ grades: { ...grades, [`${studentId}_${activityId}`]: numVal } });
   };
 
   const handleGradeKeyDown = (e, studentId, activityId, rowIndex) => {
@@ -769,28 +778,28 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const handleAddToBank = async () => {
     if (!attitudeModal.reason.trim()) return;
     const log = { id: generateId(), date: new Date().toISOString(), reason: attitudeModal.reason, bankDelta: attitudeModal.val, fieldDelta: null, field: null };
-    const currentLogs = activeClass.attitudeLogs?.[attitudeModal.studentId] || [];
-    await updateClassData({ attitudeLogs: { ...activeClass.attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
+    const currentLogs = attitudeLogs?.[attitudeModal.studentId] || [];
+    await updateClassData({ attitudeLogs: { ...attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
     setAttitudeModal({...attitudeModal, reason: '', val: 0.1});
   };
 
   const handleTransferFromBank = async () => {
     if (!attitudeModal.transferField) return;
     const log = { id: generateId(), date: new Date().toISOString(), reason: `Applied to ${attitudeModal.transferField}`, bankDelta: -attitudeModal.transferVal, fieldDelta: attitudeModal.transferVal, field: attitudeModal.transferField };
-    const currentLogs = activeClass.attitudeLogs?.[attitudeModal.studentId] || [];
-    await updateClassData({ attitudeLogs: { ...activeClass.attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
+    const currentLogs = attitudeLogs?.[attitudeModal.studentId] || [];
+    await updateClassData({ attitudeLogs: { ...attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
     setAttitudeModal({...attitudeModal, transferVal: 0.1});
   };
 
   const handleDeleteLog = async (studentId, logId) => {
-     const currentLogs = activeClass.attitudeLogs?.[studentId] || [];
+     const currentLogs = attitudeLogs?.[studentId] || [];
      const filteredLogs = currentLogs.filter(l => l.id !== logId);
-     await updateClassData({ attitudeLogs: { ...activeClass.attitudeLogs, [studentId]: filteredLogs } });
+     await updateClassData({ attitudeLogs: { ...attitudeLogs, [studentId]: filteredLogs } });
   };
 
   const handleSaveOverride = async () => {
     const val = overrideModal.val === '' ? undefined : Number(overrideModal.val);
-    const newOverrides = { ...activeClass.overrides };
+    const newOverrides = { ...overrides };
     if (!newOverrides[overrideModal.studentId]) newOverrides[overrideModal.studentId] = {};
     if (val === undefined) {
       delete newOverrides[overrideModal.studentId][overrideModal.field];
@@ -803,7 +812,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   };
 
   const handleSaveComment = async () => {
-    const updatedStudents = activeClass.students.map(s => s.id === commentModal.studentId ? { ...s, comments: commentModal.text } : s);
+    const updatedStudents = students.map(s => s.id === commentModal.studentId ? { ...s, comments: commentModal.text } : s);
     await updateClassData({ students: updatedStudents });
     setCommentModal({ ...commentModal, isOpen: false });
   };
@@ -814,11 +823,11 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     
     setIsGenerating(true);
     try {
-      const student = activeClass.students.find(s => s.id === commentModal.studentId);
+      const student = students.find(s => s.id === commentModal.studentId);
       let scoresStr = "";
       if (commentModal.includeMarks) {
-         const scores = FIELDS.map(f => `${f}: ${calculateFieldScore(student.id, f, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(1)}`).join(', ');
-         const final = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(1);
+         const scores = FIELDS.map(f => `${f}: ${calculateFieldScore(student.id, f, activities, grades, attitudeLogs, overrides).toFixed(1)}`).join(', ');
+         const final = calculateFinalMark(student.id, activities, grades, attitudeLogs, overrides).toFixed(1);
          scoresStr = `Grades: ${scores}. Final: ${final}. `;
       }
 
@@ -845,25 +854,25 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 
   const exportCSV = () => {
     let csv = `Student Name,${FIELDS.map(f => {
-      const acts = activeClass.activities.filter(a => a.field === f);
+      const acts = activities.filter(a => a.field === f);
       return acts.map(a => `${f} - ${a.name}`).join(',') + (acts.length > 0 ? `,${f} AVG` : `${f} AVG`);
     }).join(',')},FINAL MARK\n`;
 
-    activeClass.students.forEach(student => {
+    students.forEach(student => {
       csv += `"${student.name}",`;
       FIELDS.forEach(field => {
-        const acts = activeClass.activities.filter(a => a.field === field);
-        acts.forEach(act => csv += `${activeClass.grades[`${student.id}_${act.id}`] ?? ''},`);
-        csv += `${calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(2)},`;
+        const acts = activities.filter(a => a.field === field);
+        acts.forEach(act => csv += `${grades[`${student.id}_${act.id}`] ?? ''},`);
+        csv += `${calculateFieldScore(student.id, field, activities, grades, attitudeLogs, overrides).toFixed(2)},`;
       });
-      csv += `${calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(2)}\n`;
+      csv += `${calculateFinalMark(student.id, activities, grades, attitudeLogs, overrides).toFixed(2)}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${activeClass.name}_Grades.csv`;
+    a.download = `${activeClass?.name || 'Class'}_Grades.csv`;
     a.click();
   };
 
@@ -874,14 +883,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   };
 
   const processedStudents = useMemo(() => {
-    let sortable = [...activeClass.students];
+    let sortable = [...students];
     if (searchTerm) sortable = sortable.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
     if (sortConfig.key) {
       sortable.sort((a, b) => {
         if (sortConfig.key === 'name') return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
         else if (sortConfig.key === 'final') {
-          const aF = calculateFinalMark(a.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
-          const bF = calculateFinalMark(b.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
+          const aF = calculateFinalMark(a.id, activities, grades, attitudeLogs, overrides);
+          const bF = calculateFinalMark(b.id, activities, grades, attitudeLogs, overrides);
           return sortConfig.direction === 'asc' ? aF - bF : bF - aF;
         }
         return 0;
@@ -892,11 +901,11 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 
   const classAverages = useMemo(() => {
     const avgs = { activities: {}, fields: {}, final: 0 };
-    if (activeClass.students.length === 0) return avgs;
-    activeClass.activities.forEach(act => {
+    if (students.length === 0) return avgs;
+    activities.forEach(act => {
       let sum = 0, count = 0;
-      activeClass.students.forEach(s => {
-        const g = activeClass.grades[`${s.id}_${act.id}`];
+      students.forEach(s => {
+        const g = grades[`${s.id}_${act.id}`];
         if (g !== undefined && g !== '') { sum += g; count++; }
       });
       avgs.activities[act.id] = count > 0 ? (sum / count) : 0;
@@ -904,19 +913,19 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     let finalSum = 0;
     FIELDS.forEach(field => {
       let fieldSum = 0;
-      activeClass.students.forEach(s => fieldSum += calculateFieldScore(s.id, field, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides));
-      avgs.fields[field] = fieldSum / activeClass.students.length;
+      students.forEach(s => fieldSum += calculateFieldScore(s.id, field, activities, grades, attitudeLogs, overrides));
+      avgs.fields[field] = fieldSum / students.length;
     });
-    activeClass.students.forEach(s => finalSum += calculateFinalMark(s.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides));
-    avgs.final = finalSum / activeClass.students.length;
+    students.forEach(s => finalSum += calculateFinalMark(s.id, activities, grades, attitudeLogs, overrides));
+    avgs.final = finalSum / students.length;
     return avgs;
-  }, [activeClass, activeClass.grades, activeClass.overrides]);
+  }, [activeClass]);
 
   const upcomingEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
-    return (activeClass.events || []).filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
-  }, [activeClass.events]);
+    return events.filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+  }, [activeClass]);
 
   return (
     <div className="flex flex-col h-full relative z-10">
@@ -930,14 +939,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
               {isEditingClassName ? (
                 <input autoFocus value={editClassName} onChange={e=>setEditClassName(e.target.value)} onBlur={handleSaveClassName} onKeyDown={e=>e.key==='Enter'&&handleSaveClassName()} className="bg-white/80 border border-slate-300 rounded-xl px-3 py-1 outline-none focus:ring-2 focus:ring-slate-400 text-3xl font-black"/>
               ) : (
-                <span className="cursor-text" onDoubleClick={() => setIsEditingClassName(true)}>{activeClass.name}</span>
+                <span className="cursor-text" onDoubleClick={() => setIsEditingClassName(true)}>{activeClass?.name}</span>
               )}
               {!isEditingClassName && <button onClick={() => setIsEditingClassName(true)} className="text-slate-300 hover:text-slate-600 transition-opacity"><Edit2 size={18}/></button>}
               <button onClick={onDeleteClass} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Class"><Trash2 size={22}/></button>
               {isDebug && <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full shadow-sm border border-amber-200">Local Sandbox</span>}
             </h2>
             <div className="flex items-center gap-4 mt-2">
-              <p className="text-sm font-bold text-slate-500 flex items-center gap-2 bg-white/60 px-3 py-1 rounded-full shadow-inner"><User size={14}/> {activeClass.students.length} Students</p>
+              <p className="text-sm font-bold text-slate-500 flex items-center gap-2 bg-white/60 px-3 py-1 rounded-full shadow-inner"><User size={14}/> {students.length} Students</p>
               <div className="relative">
                 <input type="text" placeholder="Find student..." className="text-sm bg-white/60 border border-white rounded-full px-4 py-1.5 pl-8 focus:bg-white outline-none focus:ring-2 focus:ring-slate-200 transition-all shadow-inner placeholder:text-slate-400 font-medium w-48" value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} />
                 <span className="absolute left-2.5 top-2 text-slate-400"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
@@ -980,14 +989,13 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                 </div>
               </th>
               {FIELDS.map(field => {
-                const acts = activeClass.activities.filter(a => a.field === field);
+                const acts = activities.filter(a => a.field === field);
                 const fieldStyle = PRINT_STYLES[field];
                 return (
                   <th key={field} colSpan={Math.max(1, acts.length) + 1} className="border-b-2 border-r border-slate-200 p-3 text-center group transition-colors hover:bg-white relative" style={{backgroundColor: `${fieldStyle.cell}30`}}>
                     <div className="flex items-center justify-center gap-3">
                       <span className="font-black text-lg tracking-wide" style={{color: fieldStyle.head}}>{field}</span>
                     </div>
-                    {/* Botones Flotantes de Field Manager */}
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 z-10">
                       {acts.length > 0 && <button onClick={() => handleEqualizeWeights(field)} className="text-[9px] font-black uppercase bg-slate-800 text-white px-2 py-1 rounded shadow-sm hover:bg-black transition-colors">Equalize</button>}
                       {acts.length > 0 && <button onClick={() => openFieldManager(field, false)} className="text-[9px] font-black uppercase bg-white text-slate-600 px-2 py-1 rounded shadow-sm hover:bg-slate-50 transition-colors border border-slate-200">Edit</button>}
@@ -1006,7 +1014,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                  <input type="text" placeholder="+ Add student (Enter)" className="w-full text-sm bg-slate-100 border-none rounded-xl px-4 py-2 focus:bg-white focus:ring-2 focus:ring-slate-300 outline-none font-bold transition-all placeholder:text-slate-400 shadow-inner" value={studentName} onChange={(e) => setStudentName(e.target.value)} onKeyDown={handleAddStudent}/>
               </th>
               {FIELDS.map(field => {
-                const acts = activeClass.activities.filter(a => a.field === field);
+                const acts = activities.filter(a => a.field === field);
                 const fieldStyle = PRINT_STYLES[field];
                 return (
                   <React.Fragment key={`group-${field}`}>
@@ -1035,11 +1043,11 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           </thead>
           <tbody>
             {processedStudents.map((student, idx) => {
-              const finalMark = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
-              const isFinalOverridden = activeClass.overrides?.[student.id]?.final !== undefined;
+              const finalMark = calculateFinalMark(student.id, activities, grades, attitudeLogs, overrides);
+              const isFinalOverridden = overrides?.[student.id]?.final !== undefined;
               const { bank: attitudeBank } = getAttitudeData(student.id, activeClass);
               let missingCount = 0;
-              activeClass.activities.forEach(a => { if (activeClass.grades[`${student.id}_${a.id}`] === undefined || activeClass.grades[`${student.id}_${a.id}`] === '') missingCount++; });
+              activities.forEach(a => { if (grades[`${student.id}_${a.id}`] === undefined || grades[`${student.id}_${a.id}`] === '') missingCount++; });
 
               const isBlurred = privateMode && focusedStudent !== student.id;
               const isFocused = privateMode && focusedStudent === student.id;
@@ -1085,10 +1093,10 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                     </div>
                   </td>
                   {FIELDS.map(field => {
-                    const acts = activeClass.activities.filter(a => a.field === field);
-                    const fieldScore = calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
-                    const isFieldOverridden = activeClass.overrides?.[student.id]?.[field] !== undefined;
-                    const studentLogs = activeClass.attitudeLogs?.[student.id] || [];
+                    const acts = activities.filter(a => a.field === field);
+                    const fieldScore = calculateFieldScore(student.id, field, activities, grades, attitudeLogs, overrides);
+                    const isFieldOverridden = overrides?.[student.id]?.[field] !== undefined;
+                    const studentLogs = attitudeLogs?.[student.id] || [];
                     const fieldAttitude = studentLogs.reduce((acc, log) => (log.field === field && log.fieldDelta) ? acc + log.fieldDelta : acc, 0);
 
                     return (
@@ -1097,7 +1105,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                           <td className={`border-b border-r border-white/60 bg-white/20 ${cellPad}`}></td>
                         ) : (
                           acts.map((act) => {
-                            const val = activeClass.grades[`${student.id}_${act.id}`];
+                            const val = grades[`${student.id}_${act.id}`];
                             const isFailing = globalSettings.highlightFailing && val !== undefined && val !== '' && val < 5;
                             const isRecentlyUpdated = lastUpdatedCell === `${student.id}_${act.id}`;
                             
@@ -1117,7 +1125,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                         )}
                         <td 
                           className={`border-b border-r border-white/60 text-center font-black cursor-pointer transition-all relative ${cellPad} ${isFieldOverridden ? 'bg-amber-100/50 hover:bg-amber-100 text-amber-800 shadow-inner' : 'bg-white/70 hover:bg-white text-slate-800'} ${isBlurred ? 'pointer-events-none' : ''}`}
-                          onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: field, val: isFieldOverridden ? activeClass.overrides[student.id][field] : fieldScore.toFixed(2) }) }}
+                          onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: field, val: isFieldOverridden ? overrides[student.id][field] : fieldScore.toFixed(2) }) }}
                         >
                           <div className="flex items-center justify-center gap-1 relative">
                             <AnimatedNumber value={fieldScore} decimals={1} />
@@ -1134,7 +1142,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                   })}
                   <td 
                     className={`border-b border-r border-white/60 text-center cursor-pointer transition-all duration-300 relative ${cellPad} ${isFinalOverridden ? 'bg-amber-200/60 hover:bg-amber-300 text-amber-900 shadow-inner' : 'bg-slate-100/80 hover:bg-slate-200 text-slate-900'} ${isBlurred ? 'pointer-events-none' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: 'final', val: isFinalOverridden ? activeClass.overrides[student.id].final : finalMark.toFixed(2) }) }}
+                    onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: 'final', val: isFinalOverridden ? overrides[student.id].final : finalMark.toFixed(2) }) }}
                   >
                     <div className="flex items-center justify-center gap-1.5 font-black text-xl">
                       <AnimatedNumber value={finalMark} decimals={1} />
@@ -1163,7 +1171,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                   CLASS AVERAGE
                 </td>
                 {FIELDS.map(field => {
-                  const acts = activeClass.activities.filter(a => a.field === field);
+                  const acts = activities.filter(a => a.field === field);
                   const fieldStyle = PRINT_STYLES[field];
                   return (
                     <React.Fragment key={`avg-${field}`}>
@@ -1192,7 +1200,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
       <div id="print-section" className="hidden no-print bg-white text-black">
         <div className="mb-4 text-center">
            {globalSettings.schoolName && <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1">{globalSettings.schoolName}</p>}
-           <h1 className="text-2xl font-black uppercase">{activeClass.name}</h1>
+           <h1 className="text-2xl font-black uppercase">{activeClass?.name}</h1>
         </div>
         <table className="w-full border-collapse mb-6 text-[12px] border border-black">
           <thead>
@@ -1206,14 +1214,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
             </tr>
           </thead>
           <tbody>
-            {activeClass.students.map(student => {
-              const final = calculateFinalMark(student.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
-              const isOverridden = activeClass.overrides?.[student.id]?.final !== undefined;
+            {students.map(student => {
+              const final = calculateFinalMark(student.id, activities, grades, attitudeLogs, overrides);
+              const isOverridden = overrides?.[student.id]?.final !== undefined;
               return (
                 <tr key={student.id}>
                   <td className="border border-black p-2 font-medium">{student.name}</td>
                   {FIELDS.map(field => {
-                    const score = calculateFieldScore(student.id, field, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides);
+                    const score = calculateFieldScore(student.id, field, activities, grades, attitudeLogs, overrides);
                     const style = PRINT_STYLES[field];
                     let displayScore = '-';
                     if (score > 0) displayScore = score % 1 === 0 ? score.toString() : score.toFixed(1).replace('.', ',');
@@ -1229,7 +1237,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
         </table>
         <div className="space-y-3 mt-8 break-before-page">
           <h2 className="text-xl font-bold border-b border-black pb-2 mb-4">Official Comments</h2>
-          {activeClass.students.map(student => {
+          {students.map(student => {
             if (!student.comments) return null;
             return <p key={student.id} className="text-[12px] text-justify leading-relaxed"><strong>{student.name}:</strong> {student.comments}</p>
           })}
@@ -1316,11 +1324,11 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                <div className="bg-purple-100 p-2 rounded-xl"><Activity size={24}/></div>
                <h3 className="text-2xl font-bold">Attitude Adjustments</h3>
              </div>
-             <p className="text-sm text-slate-500 mb-6 font-medium">Modifying scores for: <span className="text-slate-800 font-bold">{activeClass.students.find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
+             <p className="text-sm text-slate-500 mb-6 font-medium">Modifying scores for: <span className="text-slate-800 font-bold">{students.find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
              
              <div className="space-y-3">
                {FIELDS.map(field => {
-                 const currentVal = activeClass.attitude[attitudeModal.studentId]?.[field] || 0;
+                 const currentVal = attitudeLogs[attitudeModal.studentId]?.[field] || 0;
                  return (
                    <div key={field} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200/60 hover:border-slate-300 transition-colors">
                      <span className="font-semibold text-slate-700">{field}</span>
@@ -1380,7 +1388,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                   <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><MessageSquare size={24}/></div>
                   Report Comments
                 </h3>
-                <p className="text-slate-500 mt-2 font-medium">Writing comments for: <span className="text-slate-800 font-bold">{activeClass.students.find(s=>s.id===commentModal.studentId)?.name}</span></p>
+                <p className="text-slate-500 mt-2 font-medium">Writing comments for: <span className="text-slate-800 font-bold">{students.find(s=>s.id===commentModal.studentId)?.name}</span></p>
               </div>
               <button onClick={() => setCommentModal({isOpen: false, studentId: null, text: ''})} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors"><X size={24}/></button>
             </div>
@@ -1417,7 +1425,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           <div className="flex-1 overflow-auto p-8">
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {FIELDS.map(field => {
-                const acts = activeClass.activities.filter(a => a.field === field);
+                const acts = activities.filter(a => a.field === field);
                 const totalW = acts.reduce((acc, curr) => acc + curr.weight, 0);
                 const data = acts.map(a => ({ name: a.name, value: a.weight }));
 
@@ -1513,11 +1521,10 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 // --- CALENDAR COMPONENT ---
 function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  
   const [eventModal, setEventModal] = useState({ isOpen: false, day: null, title: '', description: '' });
 
-  const schedule = activeClass.schedule || [];
-  const events = activeClass.events || [];
+  const schedule = activeClass?.schedule || [];
+  const events = activeClass?.events || [];
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -1551,7 +1558,7 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
       <div className="w-full md:w-64 flex flex-col gap-6 shrink-0 relative z-10">
         <div>
           <h3 className="text-3xl font-black text-slate-800 mb-2 flex items-center gap-3 tracking-tight"><div className={`bg-gradient-to-br ${theme.accentGradient} text-white p-3 rounded-2xl shadow-sm`}><CalendarDays size={28}/></div> Calendar</h3>
-          <p className="text-sm font-bold text-slate-500">Plan ahead for {activeClass.name}</p>
+          <p className="text-sm font-bold text-slate-500">Plan ahead for {activeClass?.name}</p>
         </div>
         
         <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm flex flex-col gap-3">
