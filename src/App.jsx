@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { 
   User, LogOut, Plus, Edit2, Trash2, Save, X, BarChart2, 
   MessageSquare, FileText, Settings, Activity, ArrowLeft, ArrowRight,
   ChevronDown, ChevronRight, Calculator, AlertCircle, Wand2, Undo2, ArrowUpRight, ArrowDownRight,
-  CalendarDays, Calendar, Clock, Home, Image as ImageIcon
+  CalendarDays, Calendar, Clock, Home, ImagePlus, Eye, EyeOff
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, animate } from 'framer-motion';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, query, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -83,6 +83,22 @@ const THEMES = {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 const formatDate = (isoString) => new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+// --- ANIMATED NUMBER COMPONENT ---
+function AnimatedNumber({ value, decimals = 1, className }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const controls = animate(parseFloat(node.textContent) || 0, value, {
+      duration: 0.5,
+      ease: "easeOut",
+      onUpdate(v) { node.textContent = v.toFixed(decimals); }
+    });
+    return () => controls.stop();
+  }, [value, decimals]);
+  return <span ref={ref} className={className}>{Number(value).toFixed(decimals)}</span>;
+}
 
 const calculateFieldScore = (studentId, field, activities, grades, attitudeLogs, overrides) => {
   if (overrides?.[studentId]?.[field] !== undefined) return Number(overrides[studentId][field]);
@@ -201,7 +217,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!isDebug) setUser(currentUser);
-      setTimeout(() => setAuthLoading(false), 300); // Slight delay for smoothness
+      setTimeout(() => setAuthLoading(false), 300);
     });
     return () => unsubscribe();
   }, [isDebug]);
@@ -231,9 +247,9 @@ export default function App() {
         ) : (
           <motion.div 
             key="app" 
-            initial={{ scale: 0.85, opacity: 0, filter: 'blur(20px)' }} 
+            initial={{ scale: 1.15, opacity: 0, filter: 'blur(25px)' }} 
             animate={{ scale: 1, opacity: 1, filter: 'blur(0px)' }} 
-            transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} 
+            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }} 
             className="absolute inset-0 z-30"
           >
             <MainDashboard user={user} isDebug={isDebug} />
@@ -246,7 +262,7 @@ export default function App() {
 
 function MainDashboard({ user, isDebug }) {
   const [classes, setClasses] = useState([]);
-  const [activeClassId, setActiveClassId] = useState('dashboard');
+  const [activeClassId, setActiveClassId] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [globalSettings, setGlobalSettings] = useState({ theme: 'aurora', aiContext: '', schoolName: '', compactMode: false, highlightFailing: true, geminiApiKey: '', profilePicUrl: '' });
   
@@ -282,6 +298,15 @@ function MainDashboard({ user, isDebug }) {
     return () => unsubscribe();
   }, [user.uid, isDebug]);
 
+  // Sincronizar clase activa
+  useEffect(() => {
+    if (classes.length > 0 && (!activeClassId || !classes.find(c => c.id === activeClassId))) {
+      setActiveClassId(classes[0].id);
+    } else if (classes.length === 0 && !dataLoading) {
+      setActiveClassId(null);
+    }
+  }, [classes, activeClassId, dataLoading]);
+
   const handleCreateClass = async () => {
     if (!newClassName.trim()) return;
     const newId = `class_${Date.now()}`;
@@ -298,11 +323,11 @@ function MainDashboard({ user, isDebug }) {
   const handleDeleteClass = async (classId) => {
     if (window.confirm("Are you sure you want to permanently delete this class? This action cannot be undone.")) {
       if (isDebug) {
-        setClasses(prev => prev.filter(c => c.id !== classId));
-        setActiveClassId('dashboard');
+        const remaining = classes.filter(c => c.id !== classId);
+        setClasses(remaining);
+        setActiveClassId(remaining.length > 0 ? remaining[0].id : null);
       } else {
         await deleteDoc(doc(db, 'users', user.uid, 'classes', classId));
-        setActiveClassId('dashboard');
       }
     }
   };
@@ -338,7 +363,7 @@ function MainDashboard({ user, isDebug }) {
 
       {/* Sidebar */}
       <div className={`${sidebarOpen ? 'w-72' : 'w-24'} transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-white/40 backdrop-blur-3xl m-4 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 flex flex-col relative z-20 shrink-0`}>
-        <div className="p-6 flex items-center justify-between">
+        <div className="p-6 flex items-center justify-between border-b border-white/40">
           <div className={`flex items-center gap-3 overflow-hidden whitespace-nowrap transition-all duration-500 ${sidebarOpen ? 'w-full opacity-100' : 'w-0 opacity-0 hidden'}`}>
             <div className={`bg-gradient-to-br ${theme.accentGradient} p-2 rounded-2xl shadow-sm`}><FileText size={20} className="text-white"/></div>
             <div>
@@ -351,13 +376,8 @@ function MainDashboard({ user, isDebug }) {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto py-2 px-4 scrollbar-hide space-y-2">
-          <button onClick={() => setActiveClassId('dashboard')} className={`w-full text-left py-3 rounded-2xl flex items-center transition-all duration-300 group mb-6 ${sidebarOpen ? 'px-4 gap-4' : 'justify-center px-0'} ${activeClassId === 'dashboard' ? `bg-white/80 shadow-sm border border-white` : 'hover:bg-white/50 text-slate-600 border border-transparent'}`}>
-             <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${activeClassId === 'dashboard' ? `${theme.iconBg} ${theme.iconText}` : `bg-white/60 group-hover:bg-white`}`}><Home size={18} /></div>
-             {sidebarOpen && <span className="font-bold tracking-wide">Overview</span>}
-          </button>
-
-          {sidebarOpen && <div className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">My Classes</div>}
+        <div className="flex-1 overflow-y-auto py-4 px-4 scrollbar-hide space-y-2">
+          {sidebarOpen && <div className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 mt-2">My Classes</div>}
           {classes.map(c => (
             <button key={c.id} onClick={() => setActiveClassId(c.id)} className={`w-full text-left py-3 rounded-2xl flex items-center transition-all duration-300 group ${sidebarOpen ? 'px-4 gap-4' : 'justify-center px-0'} ${activeClassId === c.id ? `bg-gradient-to-r ${theme.accentGradient} text-white shadow-lg ${theme.accentHover}` : 'hover:bg-white/80 text-slate-600'}`}>
               <div className={`p-1.5 rounded-xl transition-colors shrink-0 ${activeClassId === c.id ? 'bg-white/20' : `${theme.iconBg} group-hover:bg-white`}`}><User size={18} className={activeClassId === c.id ? 'text-white' : theme.accentText}/></div>
@@ -397,8 +417,6 @@ function MainDashboard({ user, isDebug }) {
              <div className="w-8 h-8 border-4 border-white border-t-violet-500 rounded-full animate-spin"></div>
              <p className="font-bold tracking-widest uppercase text-xs">Loading data...</p>
            </div>
-        ) : activeClassId === 'dashboard' || (!activeClass && classes.length > 0) ? (
-           <GlobalDashboard classes={classes} theme={theme} />
         ) : activeClass ? (
            <ClassView key={activeClass.id} activeClass={activeClass} userId={user.uid} isDebug={isDebug} globalSettings={globalSettings} theme={theme} setClasses={setClasses} classes={classes} onDeleteClass={() => handleDeleteClass(activeClass.id)} />
         ) : (
@@ -450,7 +468,7 @@ function MainDashboard({ user, isDebug }) {
                       <input type="text" value={globalSettings.schoolName} onChange={e => setGlobalSettings({...globalSettings, schoolName: e.target.value})} className={`w-full border border-white/80 rounded-2xl p-3 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium ${theme.accentRing} focus:ring-4`} placeholder="e.g. Springfield High"/>
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-500 mb-1 ml-1 flex items-center gap-1"><ImageIcon size={14}/> Profile Picture URL</label>
+                      <label className="block text-sm font-bold text-slate-500 mb-1 ml-1 flex items-center gap-1"><ImagePlus size={14}/> Profile Picture URL</label>
                       <input type="text" value={globalSettings.profilePicUrl || ''} onChange={e => setGlobalSettings({...globalSettings, profilePicUrl: e.target.value})} className={`w-full border border-white/80 rounded-2xl p-3 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium ${theme.accentRing} focus:ring-4`} placeholder="https://... (Optional)"/>
                     </div>
                   </div>
@@ -512,57 +530,6 @@ function MainDashboard({ user, isDebug }) {
   );
 }
 
-// --- GLOBAL DASHBOARD COMPONENT ---
-function GlobalDashboard({ classes, theme }) {
-  const allEvents = useMemo(() => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    return classes.flatMap(c => (c.events || []).map(e => ({...e, className: c.name})))
-                  .filter(e => new Date(e.date) >= today)
-                  .sort((a,b) => new Date(a.date) - new Date(b.date));
-  }, [classes]);
-
-  return (
-    <div className="flex-1 bg-white/40 backdrop-blur-3xl rounded-[3rem] border border-white/60 shadow-sm p-8 flex flex-col h-full overflow-hidden">
-      <div className="mb-8 flex items-center gap-4 border-b border-white pb-6">
-         <div className={`p-4 rounded-[2rem] bg-gradient-to-br ${theme.accentGradient} text-white shadow-lg`}><Home size={32} /></div>
-         <div>
-           <h2 className="text-4xl font-black text-slate-800 tracking-tight">Overview Dashboard</h2>
-           <p className="text-slate-500 font-medium">Welcome back! Here's what's happening across your {classes.length} classes.</p>
-         </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto pr-4 space-y-8 scrollbar-hide">
-        <div>
-          <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Calendar size={20} className={theme.accentText}/> Upcoming Events</h3>
-          {allEvents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {allEvents.map((ev, i) => (
-                <div key={i} className="bg-white/70 p-5 rounded-3xl shadow-sm border border-white hover:shadow-md transition-shadow group flex items-start gap-4">
-                  <div className="bg-slate-100 text-slate-500 font-black p-3 rounded-2xl text-center min-w-[60px] shadow-inner shrink-0 group-hover:bg-slate-200 transition-colors">
-                    <div className="text-xs uppercase tracking-widest">{new Date(ev.date).toLocaleDateString('en-GB', {month:'short'})}</div>
-                    <div className="text-2xl leading-none mt-1 text-slate-800">{new Date(ev.date).getDate()}</div>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-lg truncate" title={ev.title}>{ev.title}</h4>
-                    <p className="text-sm font-medium text-slate-500 flex items-center gap-1 mt-1"><User size={14}/> {ev.className}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white/50 p-8 rounded-3xl border border-white/80 text-center shadow-inner">
-               <CalendarDays size={48} className="mx-auto mb-3 text-slate-300"/>
-               <p className="text-slate-500 font-bold">No upcoming events scheduled.</p>
-               <p className="text-sm text-slate-400">Open a class and click "Calendar" to add tests, due dates, or reminders.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setClasses, classes, onDeleteClass }) {
   const [studentName, setStudentName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -570,6 +537,9 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [saveStatus, setSaveStatus] = useState('saved');
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editStudentName, setEditStudentName] = useState('');
+  
+  const [isEditingClassName, setIsEditingClassName] = useState(false);
+  const [editClassName, setEditClassName] = useState(activeClass.name);
 
   const [activityModal, setActivityModal] = useState({ isOpen: false, field: 'Grammar', name: '', weight: 10 });
   const [attitudeModal, setAttitudeModal] = useState({ isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' });
@@ -577,6 +547,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [overrideModal, setOverrideModal] = useState({ isOpen: false, studentId: null, field: null, val: '' });
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Private Mode & Cell Tracking
+  const [privateMode, setPrivateMode] = useState(false);
+  const [focusedStudent, setFocusedStudent] = useState(null);
+  const [lastUpdatedCell, setLastUpdatedCell] = useState(null);
+
+  const fileInputRef = useRef(null);
+  const [uploadStudentId, setUploadStudentId] = useState(null);
 
   const cellPad = globalSettings.compactMode ? 'p-1' : 'p-2';
 
@@ -591,6 +569,13 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     const classRef = doc(db, 'users', userId, 'classes', activeClass.id);
     await updateDoc(classRef, updates);
     setTimeout(() => setSaveStatus('saved'), 400);
+  };
+
+  const handleSaveClassName = async () => {
+    if (editClassName.trim() && editClassName !== activeClass.name) {
+      await updateClassData({ name: editClassName.trim() });
+    }
+    setIsEditingClassName(false);
   };
 
   const handleAddStudent = async (e) => {
@@ -615,12 +600,35 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     setEditingStudentId(null);
   };
 
-  const handleAvatarPrompt = async (studentId) => {
-    const url = window.prompt("Enter image URL for this student's profile picture:");
-    if (url !== null) {
-      const updatedStudents = activeClass.students.map(s => s.id === studentId ? { ...s, avatar: url.trim() } : s);
-      await updateClassData({ students: updatedStudents });
-    }
+  const triggerAvatarUpload = (studentId) => {
+    setUploadStudentId(studentId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file || !uploadStudentId) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const MAX_SIZE = 150;
+        let { width, height } = img;
+        if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
+        else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+        canvas.width = width; canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const updatedStudents = activeClass.students.map(s => s.id === uploadStudentId ? { ...s, avatar: dataUrl } : s);
+        await updateClassData({ students: updatedStudents });
+        setUploadStudentId(null);
+        e.target.value = '';
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddActivity = async () => {
@@ -660,6 +668,21 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const handleGradeChange = (studentId, activityId, value) => {
     const numVal = value === '' ? '' : Number(value);
     updateClassData({ grades: { ...activeClass.grades, [`${studentId}_${activityId}`]: numVal } });
+  };
+
+  const handleGradeKeyDown = (e, studentId, activityId, rowIndex) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setLastUpdatedCell(`${studentId}_${activityId}`);
+      setTimeout(() => setLastUpdatedCell(null), 400);
+      const nextInput = document.querySelector(`input[data-row="${rowIndex + 1}"][data-col="${activityId}"]`);
+      if (nextInput) { nextInput.focus(); nextInput.select(); }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const nextRow = e.key === 'ArrowDown' ? rowIndex + 1 : rowIndex - 1;
+      const nextInput = document.querySelector(`input[data-row="${nextRow}"][data-col="${activityId}"]`);
+      if (nextInput) { nextInput.focus(); nextInput.select(); }
+    }
   };
 
   const handleAddToBank = async () => {
@@ -711,7 +734,6 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     setIsGenerating(true);
     try {
       const student = activeClass.students.find(s => s.id === commentModal.studentId);
-      
       let scoresStr = "";
       if (commentModal.includeMarks) {
          const scores = FIELDS.map(f => `${f}: ${calculateFieldScore(student.id, f, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides).toFixed(1)}`).join(', ');
@@ -807,16 +829,29 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     activeClass.students.forEach(s => finalSum += calculateFinalMark(s.id, activeClass.activities, activeClass.grades, activeClass.attitudeLogs, activeClass.overrides));
     avgs.final = finalSum / activeClass.students.length;
     return avgs;
-  }, [activeClass]);
+  }, [activeClass, activeClass.grades, activeClass.overrides]);
+
+  const upcomingEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return (activeClass.events || []).filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+  }, [activeClass.events]);
 
   return (
     <div className="flex flex-col h-full relative z-10">
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+      
       {/* Header */}
       <div className="bg-white/40 backdrop-blur-3xl border border-white/60 rounded-[2.5rem] px-8 py-5 flex flex-col md:flex-row items-center justify-between shadow-sm mb-4 no-print shrink-0">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-              {activeClass.name} 
+              {isEditingClassName ? (
+                <input autoFocus value={editClassName} onChange={e=>setEditClassName(e.target.value)} onBlur={handleSaveClassName} onKeyDown={e=>e.key==='Enter'&&handleSaveClassName()} className="bg-white/80 border border-slate-300 rounded-xl px-3 py-1 outline-none focus:ring-2 focus:ring-slate-400 text-3xl font-black"/>
+              ) : (
+                <span className="cursor-text" onDoubleClick={() => setIsEditingClassName(true)}>{activeClass.name}</span>
+              )}
+              {!isEditingClassName && <button onClick={() => setIsEditingClassName(true)} className="text-slate-300 hover:text-slate-600 transition-opacity"><Edit2 size={18}/></button>}
               <button onClick={onDeleteClass} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Delete Class"><Trash2 size={22}/></button>
               {isDebug && <span className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full shadow-sm border border-amber-200">Local Sandbox</span>}
             </h2>
@@ -832,11 +867,23 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-4 md:mt-0">
-          <button onClick={() => setCalendarOpen(true)} className="flex items-center gap-2 bg-white/80 hover:bg-white text-slate-700 px-4 py-3 rounded-2xl transition-colors font-bold shadow-sm border border-white">
-            <Calendar size={18} className={theme.accentText} /> Calendar
+        <div className="flex items-center gap-4 mt-4 md:mt-0">
+          {upcomingEvents.length > 0 && (
+             <div className="flex gap-2 mr-4 border-r border-white/50 pr-4 overflow-x-auto scrollbar-hide max-w-[300px]">
+               {upcomingEvents.map(ev => (
+                 <div key={ev.id} className="bg-white/60 px-3 py-1.5 rounded-xl border border-white shadow-sm flex flex-col justify-center min-w-[120px]">
+                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{new Date(ev.date).toLocaleDateString('en-GB', {day:'2-digit', month:'short'})}</span>
+                   <span className="text-sm font-bold text-slate-800 truncate">{ev.title}</span>
+                 </div>
+               ))}
+             </div>
+          )}
+          <button onClick={() => setPrivateMode(!privateMode)} className={`flex items-center gap-2 px-4 py-3 rounded-2xl transition-all font-bold shadow-sm border border-white ${privateMode ? `bg-slate-800 text-white` : 'bg-white/80 hover:bg-white text-slate-700'}`}>
+            {privateMode ? <EyeOff size={18} /> : <Eye size={18} className={theme.accentText} />} Private
           </button>
-          <button onClick={exportCSV} className={`flex items-center gap-2 bg-white/80 hover:bg-white text-slate-700 px-4 py-3 rounded-2xl transition-colors font-bold shadow-sm border border-white ${theme.accentText}`}>Export CSV</button>
+          <button onClick={() => setCalendarOpen(true)} className="flex items-center gap-2 bg-white/80 hover:bg-white text-slate-700 px-4 py-3 rounded-2xl transition-colors font-bold shadow-sm border border-white">
+            <Calendar size={18} className={theme.accentText} />
+          </button>
           <button onClick={() => window.print()} className={`flex items-center gap-2 bg-gradient-to-r ${theme.accentGradient} text-white px-5 py-3 rounded-2xl transition-all shadow-lg ${theme.accentHover} font-black tracking-wide`}><FileText size={18} /> Print PDF</button>
         </div>
       </div>
@@ -844,9 +891,9 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
       {/* Main Grid */}
       <div className="flex-1 overflow-auto bg-white/40 backdrop-blur-3xl rounded-[3rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] no-print relative">
         <table className="w-full border-collapse table-auto min-w-max">
-          <thead className="bg-white/80 backdrop-blur-md sticky top-0 z-20 shadow-sm border-b border-white">
+          <thead className="bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-sm border-b border-white">
             <tr>
-              <th className="w-64 p-0 sticky left-0 z-30 bg-white/90 backdrop-blur-md border-b-2 border-r border-slate-200 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-white" onClick={() => handleSort('name')}>
+              <th className="w-64 p-0 sticky left-0 z-40 bg-white/90 backdrop-blur-md border-b-2 border-r border-slate-200 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] cursor-pointer hover:bg-white" onClick={() => handleSort('name')}>
                 <div className="px-6 py-4 flex items-center justify-between h-full">
                   <span className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-2">STUDENTS {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</span>
                 </div>
@@ -872,7 +919,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
               <th className="w-32 border-b-2 border-slate-200 p-3 bg-white/50 text-center font-bold text-slate-500 uppercase tracking-widest text-xs">EXTRAS</th>
             </tr>
             <tr className="text-sm">
-              <th className="sticky left-0 z-30 bg-white/90 backdrop-blur-md border-b border-r border-slate-200 p-3 text-left align-bottom shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
+              <th className="sticky left-0 z-40 bg-white/90 backdrop-blur-md border-b border-r border-slate-200 p-3 text-left align-bottom shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
                  <input type="text" placeholder="+ Add student (Enter)" className="w-full text-sm bg-slate-100 border-none rounded-xl px-4 py-2 focus:bg-white focus:ring-2 focus:ring-slate-300 outline-none font-bold transition-all placeholder:text-slate-400 shadow-inner" value={studentName} onChange={(e) => setStudentName(e.target.value)} onKeyDown={handleAddStudent}/>
               </th>
               {FIELDS.map(field => {
@@ -886,7 +933,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                       acts.map(act => (
                         <th key={act.id} className="border-b border-r border-slate-200 p-3 text-center font-normal min-w-[110px] relative group bg-white/50 hover:bg-white transition-colors">
                           <div className="font-bold text-slate-700 truncate px-2">{act.name}</div>
-                          <div className="text-[10px] font-black mt-1 bg-white inline-block px-2 py-0.5 rounded-full shadow-sm text-slate-500">{act.weight.toFixed(1)}%</div>
+                          <div className="text-[10px] font-black mt-1 bg-white inline-block px-2 py-0.5 rounded-full shadow-sm text-slate-500">{act.weight}%</div>
                           <div className="absolute top-2 right-1 opacity-0 group-hover:opacity-100 flex flex-col gap-1">
                             <button onClick={() => handleDeleteActivity(act.id)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded-lg transition-all"><Trash2 size={12}/></button>
                             <button onClick={() => handleBulkFill(act.id)} className="text-slate-400 hover:text-violet-500 hover:bg-violet-50 p-1 rounded-lg transition-all" title="Fill Empty"><Wand2 size={12}/></button>
@@ -910,14 +957,24 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
               let missingCount = 0;
               activeClass.activities.forEach(a => { if (activeClass.grades[`${student.id}_${a.id}`] === undefined || activeClass.grades[`${student.id}_${a.id}`] === '') missingCount++; });
 
+              const isBlurred = privateMode && focusedStudent !== student.id;
+              const isFocused = privateMode && focusedStudent === student.id;
+
               return (
-                <tr key={student.id} className="group">
+                <tr 
+                   key={student.id} 
+                   onClick={() => privateMode && setFocusedStudent(student.id)}
+                   className={`group transition-all duration-300 relative 
+                     ${isBlurred ? 'opacity-20 blur-[4px] hover:blur-sm cursor-pointer' : ''} 
+                     ${isFocused ? 'bg-white shadow-2xl z-20 scale-[1.01] ring-2 ring-slate-800' : 'hover:bg-white/30'}
+                   `}
+                >
                   <td className="sticky left-0 z-10 bg-white/80 group-hover:bg-white border-b border-r border-white/60 p-0 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.02)] transition-colors backdrop-blur-md">
                     <div className={`flex items-center justify-between px-4 ${cellPad}`}>
                       <div className="flex-1 pr-2 flex items-center gap-3">
-                        <button onClick={() => handleAvatarPrompt(student.id)} className="w-8 h-8 rounded-full bg-slate-100 border border-white shadow-inner overflow-hidden shrink-0 group-avatar relative transition-transform hover:scale-105" title="Add profile picture">
+                        <button onClick={(e) => { e.stopPropagation(); triggerAvatarUpload(student.id); }} className="w-8 h-8 rounded-full bg-slate-100 border border-white shadow-inner overflow-hidden shrink-0 group-avatar relative transition-transform hover:scale-105" title="Add profile picture">
                           {student.avatar ? <img src={student.avatar} className="w-full h-full object-cover" alt={student.name} /> : <User size={14} className="text-slate-400 mx-auto mt-2" />}
-                          <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center"><ImageIcon size={12} className="text-white"/></div>
+                          <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center"><ImagePlus size={12} className="text-white"/></div>
                         </button>
                         <div>
                           {editingStudentId === student.id ? (
@@ -930,16 +987,16 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                               onKeyDown={e => e.key === 'Enter' && handleRenameStudent(student.id)}
                             />
                           ) : (
-                            <span className="font-black text-slate-800 block cursor-text flex items-center gap-2" onDoubleClick={() => {setEditingStudentId(student.id); setEditStudentName(student.name);}}>
+                            <span className="font-black text-slate-800 block cursor-text flex items-center gap-2" onDoubleClick={(e) => { e.stopPropagation(); setEditingStudentId(student.id); setEditStudentName(student.name);}}>
                               {student.name}
-                              <button onClick={() => {setEditingStudentId(student.id); setEditStudentName(student.name);}} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-slate-600 transition-opacity"><Edit2 size={12}/></button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingStudentId(student.id); setEditStudentName(student.name);}} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-slate-600 transition-opacity"><Edit2 size={12}/></button>
                             </span>
                           )}
                           {missingCount > 0 && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md uppercase mt-0.5 inline-block">{missingCount} missing</span>}
                         </div>
                       </div>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0">
-                        <button onClick={() => handleDeleteStudent(student.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteStudent(student.id); }} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={16} /></button>
                       </div>
                     </div>
                   </td>
@@ -958,36 +1015,31 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                           acts.map((act) => {
                             const val = activeClass.grades[`${student.id}_${act.id}`];
                             const isFailing = globalSettings.highlightFailing && val !== undefined && val !== '' && val < 5;
+                            const isRecentlyUpdated = lastUpdatedCell === `${student.id}_${act.id}`;
+                            
                             return (
-                              <td key={act.id} className={`border-b border-r border-white/60 bg-white/40 group-hover:bg-white/60 transition-colors relative ${cellPad}`}>
+                              <td key={act.id} className={`border-b border-r border-white/60 bg-white/40 group-hover:bg-white/60 transition-colors relative ${cellPad} ${isBlurred ? 'pointer-events-none' : ''}`}>
                                 <input 
                                   type="number" min="0" max="100" 
                                   data-row={idx} data-col={act.id}
-                                  className={`w-full text-center p-2 rounded-xl border-none focus:ring-2 focus:ring-slate-300 outline-none transition-all font-black text-slate-700 placeholder:text-slate-300 shadow-inner ${isFailing ? 'bg-red-50 text-red-700' : 'bg-slate-100 hover:bg-white focus:bg-white'}`} 
+                                  className={`w-full text-center p-2 rounded-[1rem] border border-white/60 focus:bg-white focus:ring-2 focus:ring-violet-300 outline-none transition-all font-black text-slate-700 shadow-inner backdrop-blur-sm placeholder:text-slate-300 ${isFailing ? 'bg-red-50 text-red-700' : 'bg-white/40 hover:bg-white'} ${isRecentlyUpdated ? 'scale-[1.15] bg-emerald-100 ring-2 ring-emerald-400 z-10 relative' : ''}`} 
                                   placeholder="-" value={val ?? ''} 
                                   onChange={(e) => handleGradeChange(student.id, act.id, e.target.value)} 
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                                      e.preventDefault();
-                                      const nextRow = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
-                                      const nextInput = document.querySelector(`input[data-row="${nextRow}"][data-col="${act.id}"]`);
-                                      if (nextInput) { nextInput.focus(); nextInput.select(); }
-                                    }
-                                  }}
+                                  onKeyDown={(e) => handleGradeKeyDown(e, student.id, act.id, idx)}
                                 />
                               </td>
                             )
                           })
                         )}
                         <td 
-                          className={`border-b border-r border-white/60 text-center font-black cursor-pointer transition-all relative ${cellPad} ${isFieldOverridden ? 'bg-amber-100/50 hover:bg-amber-100 text-amber-800 shadow-inner' : 'bg-white/70 hover:bg-white text-slate-800'}`}
-                          onClick={() => setOverrideModal({ isOpen: true, studentId: student.id, field: field, val: isFieldOverridden ? activeClass.overrides[student.id][field] : fieldScore.toFixed(2) })}
+                          className={`border-b border-r border-white/60 text-center font-black cursor-pointer transition-all relative ${cellPad} ${isFieldOverridden ? 'bg-amber-100/50 hover:bg-amber-100 text-amber-800 shadow-inner' : 'bg-white/70 hover:bg-white text-slate-800'} ${isBlurred ? 'pointer-events-none' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: field, val: isFieldOverridden ? activeClass.overrides[student.id][field] : fieldScore.toFixed(2) }) }}
                         >
-                          <div className="flex items-center justify-center gap-1">
-                            {fieldScore.toFixed(1)}
-                            {isFieldOverridden && <AlertCircle size={10} className="text-amber-500 absolute top-1 right-1" />}
+                          <div className="flex items-center justify-center gap-1 relative">
+                            <AnimatedNumber value={fieldScore} decimals={1} />
+                            {isFieldOverridden && <AlertCircle size={10} className="text-amber-500 absolute -top-1 -right-1" />}
                             {fieldAttitude !== 0 && !isFieldOverridden && (
-                              <div className={`absolute bottom-1 right-1 flex items-center ${fieldAttitude > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              <div className={`absolute -bottom-1 -right-1 flex items-center ${fieldAttitude > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                 {fieldAttitude > 0 ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>}
                               </div>
                             )}
@@ -997,21 +1049,21 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                     )
                   })}
                   <td 
-                    className={`border-b border-r border-white/60 text-center cursor-pointer transition-all duration-300 relative ${cellPad} ${isFinalOverridden ? 'bg-amber-200/60 hover:bg-amber-300 text-amber-900 shadow-inner' : 'bg-slate-100/80 hover:bg-slate-200 text-slate-900'}`}
-                    onClick={() => setOverrideModal({ isOpen: true, studentId: student.id, field: 'final', val: isFinalOverridden ? activeClass.overrides[student.id].final : finalMark.toFixed(2) })}
+                    className={`border-b border-r border-white/60 text-center cursor-pointer transition-all duration-300 relative ${cellPad} ${isFinalOverridden ? 'bg-amber-200/60 hover:bg-amber-300 text-amber-900 shadow-inner' : 'bg-slate-100/80 hover:bg-slate-200 text-slate-900'} ${isBlurred ? 'pointer-events-none' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setOverrideModal({ isOpen: true, studentId: student.id, field: 'final', val: isFinalOverridden ? activeClass.overrides[student.id].final : finalMark.toFixed(2) }) }}
                   >
                     <div className="flex items-center justify-center gap-1.5 font-black text-xl">
-                      {finalMark.toFixed(1)}
+                      <AnimatedNumber value={finalMark} decimals={1} />
                       {isFinalOverridden && <AlertCircle size={14} className="text-amber-600 absolute top-2 right-2" />}
                     </div>
                   </td>
-                  <td className={`border-b border-white/60 bg-white/20 group-hover:bg-transparent transition-colors ${cellPad}`}>
+                  <td className={`border-b border-white/60 bg-white/20 group-hover:bg-transparent transition-colors ${cellPad} ${isBlurred ? 'pointer-events-none' : ''}`}>
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => setAttitudeModal({ isOpen: true, studentId: student.id, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' })} className={`p-2 rounded-2xl transition-all duration-300 relative ${attitudeBank !== 0 ? 'bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200 shadow-sm' : 'text-slate-500 hover:bg-white/80 hover:text-slate-800'}`}>
+                      <button onClick={(e) => { e.stopPropagation(); setAttitudeModal({ isOpen: true, studentId: student.id, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar' }); }} className={`p-2 rounded-2xl transition-all duration-300 relative ${attitudeBank !== 0 ? 'bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200 shadow-sm' : 'text-slate-500 hover:bg-white/80 hover:text-slate-800'}`}>
                         <Activity size={18} />
                         {attitudeBank !== 0 && <span className={`absolute -top-1.5 -right-1.5 text-[10px] font-black px-1.5 rounded-full border-2 border-white shadow-sm ${attitudeBank > 0 ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>{attitudeBank > 0 ? '+' : ''}{attitudeBank.toFixed(1)}</span>}
                       </button>
-                      <button onClick={() => setCommentModal({ isOpen: true, studentId: student.id, text: student.comments || '', aiPrompt: '', aiLanguage: 'English', includeMarks: true })} className={`p-2 rounded-2xl transition-all duration-300 relative ${student.comments ? `${theme.iconBg} ${theme.iconText} hover:bg-white shadow-sm` : 'text-slate-500 hover:bg-white/80 hover:text-slate-800'}`}>
+                      <button onClick={(e) => { e.stopPropagation(); setCommentModal({ isOpen: true, studentId: student.id, text: student.comments || '', aiPrompt: '', aiLanguage: 'English', includeMarks: true }); }} className={`p-2 rounded-2xl transition-all duration-300 relative ${student.comments ? `${theme.iconBg} ${theme.iconText} hover:bg-white shadow-sm` : 'text-slate-500 hover:bg-white/80 hover:text-slate-800'}`}>
                         <MessageSquare size={18} />
                         {student.comments && <span className={`absolute -top-1 -right-1 w-3 h-3 ${theme.blob1} rounded-full border-2 border-white`}></span>}
                       </button>
@@ -1033,17 +1085,17 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                     <React.Fragment key={`avg-${field}`}>
                       {acts.length === 0 ? <td className="bg-white/60 backdrop-blur-md border-t-4 border-white border-r"></td> : acts.map(act => (
                         <td key={`avg-${act.id}`} className="bg-white/60 backdrop-blur-md border-t-4 border-white border-r p-2 text-center font-bold text-slate-500 text-sm">
-                          {classAverages.activities[act.id] > 0 ? classAverages.activities[act.id].toFixed(1) : '-'}
+                          {classAverages.activities[act.id] > 0 ? <AnimatedNumber value={classAverages.activities[act.id]} decimals={1} /> : '-'}
                         </td>
                       ))}
                       <td className="bg-white/80 backdrop-blur-md border-t-4 border-white border-r p-2 text-center font-black shadow-inner" style={{color: fieldStyle.head}}>
-                        {classAverages.fields[field] > 0 ? classAverages.fields[field].toFixed(1) : '-'}
+                        {classAverages.fields[field] > 0 ? <AnimatedNumber value={classAverages.fields[field]} decimals={1} /> : '-'}
                       </td>
                     </React.Fragment>
                   )
                 })}
                 <td className="bg-white/90 backdrop-blur-md border-t-4 border-white border-r p-2 text-center font-black text-lg text-slate-800 shadow-inner">
-                  {classAverages.final > 0 ? classAverages.final.toFixed(1) : '-'}
+                  {classAverages.final > 0 ? <AnimatedNumber value={classAverages.final} decimals={1} /> : '-'}
                 </td>
                 <td className="bg-white/60 backdrop-blur-md border-t-4 border-white"></td>
               </tr>
@@ -1106,14 +1158,18 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 px-4">
             <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="bg-white/90 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white p-8 w-full max-w-sm">
               <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><div className={`p-2 rounded-xl ${theme.iconBg} ${theme.iconText}`}><Plus size={24}/></div> Add Activity</h3>
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-bold text-slate-500 mb-2 ml-1">Activity Name</label>
                   <input type="text" autoFocus value={activityModal.name} onChange={e => setActivityModal({...activityModal, name: e.target.value})} className={`w-full border border-white/60 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold ${theme.accentRing} focus:ring-4 placeholder:text-slate-400`} placeholder="e.g. Unit 1 Test"/>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-2 ml-1">Weight (%) in {activityModal.field}</label>
-                  <input type="number" min="0" value={activityModal.weight} onChange={e => setActivityModal({...activityModal, weight: e.target.value})} className={`w-full border border-white/60 rounded-2xl p-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-black text-lg ${theme.accentRing} focus:ring-4`}/>
+                  <label className="block text-sm font-bold text-slate-500 mb-4 ml-1 flex justify-between">
+                    Weight (%) in {activityModal.field}
+                    <span className={`text-xl font-black ${theme.accentText}`}>{activityModal.weight}%</span>
+                  </label>
+                  <input type="range" min="1" max="100" value={activityModal.weight} onChange={e => setActivityModal({...activityModal, weight: e.target.value})} className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-800" />
+                  <p className="text-xs text-slate-400 mt-4 leading-relaxed font-medium">Weights are calculated proportionally. Use the calculator icon in the header to auto-equalize weights.</p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-8">
@@ -1324,6 +1380,8 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
 function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
+  const [eventModal, setEventModal] = useState({ isOpen: false, day: null, title: '', description: '' });
+
   const schedule = activeClass.schedule || [];
   const events = activeClass.events || [];
 
@@ -1332,19 +1390,19 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
   
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
-  const startDay = firstDay === 0 ? 6 : firstDay - 1; // Hacer que Lunes = 0
+  const startDay = firstDay === 0 ? 6 : firstDay - 1;
 
   const toggleScheduleDay = (dayIndex) => {
     const newSchedule = schedule.includes(dayIndex) ? schedule.filter(d => d !== dayIndex) : [...schedule, dayIndex];
     onUpdate({ schedule: newSchedule });
   };
 
-  const handleAddEvent = (day) => {
-    const title = window.prompt(`Add new event for ${day}/${month + 1}/${year}:`);
-    if (title && title.trim()) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const newEvent = { id: generateId(), date: dateStr, title: title.trim() };
+  const handleSaveEvent = () => {
+    if (eventModal.title.trim() && eventModal.day) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(eventModal.day).padStart(2, '0')}`;
+      const newEvent = { id: generateId(), date: dateStr, title: eventModal.title.trim(), description: eventModal.description.trim() };
       onUpdate({ events: [...events, newEvent] });
+      setEventModal({ isOpen: false, day: null, title: '', description: '' });
     }
   };
 
@@ -1356,7 +1414,7 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
 
   return (
     <>
-      <div className="w-full md:w-64 flex flex-col gap-6 shrink-0">
+      <div className="w-full md:w-64 flex flex-col gap-6 shrink-0 relative z-10">
         <div>
           <h3 className="text-3xl font-black text-slate-800 mb-2 flex items-center gap-3 tracking-tight"><div className={`bg-gradient-to-br ${theme.accentGradient} text-white p-3 rounded-2xl shadow-sm`}><CalendarDays size={28}/></div> Calendar</h3>
           <p className="text-sm font-bold text-slate-500">Plan ahead for {activeClass.name}</p>
@@ -1381,7 +1439,7 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
         <button onClick={onClose} className="mt-auto w-full py-4 bg-white hover:bg-slate-50 text-slate-700 font-black rounded-2xl shadow-sm border border-slate-200 transition-all">Close Calendar</button>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-[400px]">
+      <div className="flex-1 flex flex-col min-h-[400px] relative z-10">
         <div className="flex items-center justify-between mb-4 bg-white/60 p-4 rounded-3xl border border-white shadow-inner">
           <button onClick={() => setCurrentMonth(new Date(year, month - 1))} className="p-2 hover:bg-white rounded-xl transition-colors"><ArrowLeft size={20}/></button>
           <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">{currentMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</h2>
@@ -1404,11 +1462,11 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
               const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
 
               return (
-                <div key={day} onClick={() => handleAddEvent(day)} className={`relative flex flex-col p-2 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${isClassDay ? `bg-${theme.accentText.split('-')[1]}-50/50 border-${theme.accentText.split('-')[1]}-200/50 hover:bg-white hover:border-${theme.accentText.split('-')[1]}-300` : 'bg-white/50 border-white hover:bg-white'} ${isToday ? 'ring-2 ring-slate-800 shadow-md' : 'shadow-sm'}`}>
+                <div key={day} onClick={() => setEventModal({ isOpen: true, day, title: '', description: '' })} className={`relative flex flex-col p-2 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${isClassDay ? `bg-${theme.accentText.split('-')[1]}-50/50 border-${theme.accentText.split('-')[1]}-200/50 hover:bg-white hover:border-${theme.accentText.split('-')[1]}-300` : 'bg-white/50 border-white hover:bg-white'} ${isToday ? 'ring-2 ring-slate-800 shadow-md' : 'shadow-sm'}`}>
                   <span className={`text-sm font-black ${isClassDay ? theme.accentText : 'text-slate-600'} ${isToday ? 'bg-slate-800 text-white w-6 h-6 flex items-center justify-center rounded-full' : ''}`}>{day}</span>
                   <div className="flex-1 mt-1 space-y-1 overflow-y-auto scrollbar-hide">
                     {dayEvents.map(ev => (
-                      <div key={ev.id} onClick={(e) => { e.stopPropagation(); handleDeleteEvent(ev.id); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg truncate ${isClassDay ? `bg-${theme.accentText.split('-')[1]}-100 ${theme.accentText}` : 'bg-slate-100 text-slate-600'} hover:opacity-70`} title={ev.title}>
+                      <div key={ev.id} onClick={(e) => { e.stopPropagation(); handleDeleteEvent(ev.id); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg truncate ${isClassDay ? `bg-${theme.accentText.split('-')[1]}-100 ${theme.accentText}` : 'bg-slate-100 text-slate-600'} hover:opacity-70`} title={ev.description ? `${ev.title}: ${ev.description}` : ev.title}>
                         {ev.title}
                       </div>
                     ))}
@@ -1422,6 +1480,23 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {eventModal.isOpen && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 rounded-[3rem]">
+            <motion.div initial={{scale:0.95}} animate={{scale:1}} exit={{scale:0.95}} className="bg-white/95 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border border-white p-8 w-full max-w-sm">
+              <h3 className="text-xl font-black text-slate-800 mb-4">Add Event</h3>
+              <p className="text-sm font-bold text-slate-500 mb-4">Date: {eventModal.day} {currentMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' })}</p>
+              <input type="text" autoFocus placeholder="Event Title" value={eventModal.title} onChange={e => setEventModal({...eventModal, title: e.target.value})} className={`w-full border border-white/60 rounded-2xl p-3 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold mb-3 ${theme.accentRing} focus:ring-4`} />
+              <textarea placeholder="Description (Optional)" value={eventModal.description} onChange={e => setEventModal({...eventModal, description: e.target.value})} className={`w-full h-24 border border-white/60 rounded-2xl p-3 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium resize-none ${theme.accentRing} focus:ring-4 placeholder:text-slate-400`} />
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setEventModal({isOpen: false, day: null, title: '', description: ''})} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+                <button onClick={handleSaveEvent} className={`px-4 py-2 bg-gradient-to-r ${theme.accentGradient} text-white font-black rounded-xl transition-all shadow-md`}>Save Event</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
