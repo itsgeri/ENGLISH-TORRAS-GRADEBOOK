@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, AlertCircle, Wand2, Undo2, ArrowUpRight, ArrowDownRight,
   CalendarDays, Calendar, Clock, Home, ImagePlus, Eye, EyeOff
 } from 'lucide-react';
-import { motion, AnimatePresence, animate } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, collection, query, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -84,27 +84,49 @@ const THEMES = {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 const formatDate = (isoString) => new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-// --- ANIMATED NUMBER COMPONENT ---
+// --- UTILIDAD DE BLINDAJE (SAFE ARRAY) PARA EVITAR CRASHES ---
+const safeArray = (arr) => {
+  if (Array.isArray(arr)) return arr.filter(Boolean);
+  if (arr && typeof arr === 'object') return Object.values(arr).filter(Boolean);
+  return [];
+};
+
+// --- ANIMATED NUMBER COMPONENT (Nativo para mayor fluidez) ---
 function AnimatedNumber({ value, decimals = 1, className }) {
-  const [displayValue, setDisplayValue] = useState(value);
+  const safeValue = isNaN(value) ? 0 : Number(value);
+  const [displayValue, setDisplayValue] = useState(safeValue);
   
   useEffect(() => {
-    const controls = animate(displayValue, value, {
-      duration: 0.6,
-      ease: "easeOut",
-      onUpdate: (v) => setDisplayValue(v)
-    });
-    return () => controls.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]); 
+    let start = displayValue;
+    const end = safeValue;
+    if (start === end) return;
+    
+    let startTime = null;
+    const duration = 500; // ms
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      // easeOutQuart
+      const easeProgress = 1 - Math.pow(1 - progress, 4);
+      setDisplayValue(start + (end - start) * easeProgress);
+      
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      }
+    };
+    window.requestAnimationFrame(step);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeValue]);
 
   return <span className={className}>{Number(displayValue).toFixed(decimals)}</span>;
 }
 
-// Fallbacks de seguridad (activities=[], grades={}, etc.) para evitar crasheos si faltan datos
+// Fallbacks de seguridad en cálculos
 const calculateFieldScore = (studentId, field, activities = [], grades = {}, attitudeLogs = {}, overrides = {}) => {
   if (overrides?.[studentId]?.[field] !== undefined) return Number(overrides[studentId][field]);
-  const fieldActivities = activities.filter(a => a.field === field);
+  const safeActs = safeArray(activities);
+  const fieldActivities = safeActs.filter(a => a.field === field);
   if (fieldActivities.length === 0) return 0;
 
   let totalWeight = 0, weightedSum = 0;
@@ -115,7 +137,8 @@ const calculateFieldScore = (studentId, field, activities = [], grades = {}, att
   });
 
   let average = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
-  const fieldAttitude = (attitudeLogs?.[studentId] || []).reduce((acc, log) => (log.field === field && log.fieldDelta) ? acc + log.fieldDelta : acc, 0);
+  const logs = safeArray(attitudeLogs?.[studentId]);
+  const fieldAttitude = logs.reduce((acc, log) => (log.field === field && log.fieldDelta) ? acc + log.fieldDelta : acc, 0);
   return Math.max(0, average + fieldAttitude);
 };
 
@@ -123,7 +146,7 @@ const calculateFinalMark = (studentId, activities = [], grades = {}, attitudeLog
   if (overrides?.[studentId]?.final !== undefined) return Number(overrides[studentId].final);
   let totalScore = 0, activeFields = 0;
   FIELDS.forEach(field => {
-    const fieldActivities = activities.filter(a => a.field === field);
+    const fieldActivities = safeArray(activities).filter(a => a.field === field);
     if (fieldActivities.length > 0) {
       totalScore += calculateFieldScore(studentId, field, activities, grades, attitudeLogs, overrides);
       activeFields++;
@@ -133,7 +156,7 @@ const calculateFinalMark = (studentId, activities = [], grades = {}, attitudeLog
 };
 
 const getAttitudeData = (studentId, activeClass) => {
-  const logs = activeClass.attitudeLogs?.[studentId] || [];
+  const logs = safeArray(activeClass?.attitudeLogs?.[studentId]);
   let bank = 0;
   logs.forEach(log => { if (log.bankDelta !== null) bank += log.bankDelta; });
   return { bank, logs };
@@ -354,11 +377,10 @@ function MainDashboard({ user, isDebug }) {
         .animation-delay-2000 { animation-delay: 2s; }
         .animation-delay-4000 { animation-delay: 4s; }
         
-        /* Ocultar las flechas nativas del input number */
+        /* Ocultar flechas del input number */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { 
-          -webkit-appearance: none; 
-          margin: 0; 
+          -webkit-appearance: none; margin: 0; 
         }
       `}</style>
 
@@ -550,9 +572,11 @@ function GlobalDashboard({ classes, theme }) {
   const allEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
-    return classes.flatMap(c => (c.events || []).map(e => ({...e, className: c.name})))
-                  .filter(e => new Date(e.date) >= today)
-                  .sort((a,b) => new Date(a.date) - new Date(b.date));
+    return safeArray(classes).flatMap(c => 
+      safeArray(c.events).map(e => ({...e, className: c.name}))
+    )
+    .filter(e => e && e.date && new Date(e.date) >= today)
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
   }, [classes]);
 
   return (
@@ -561,7 +585,7 @@ function GlobalDashboard({ classes, theme }) {
          <div className={`p-4 rounded-[2rem] bg-gradient-to-br ${theme.accentGradient} text-white shadow-lg`}><Home size={32} /></div>
          <div>
            <h2 className="text-4xl font-black text-slate-800 tracking-tight">Overview Dashboard</h2>
-           <p className="text-slate-500 font-medium">Welcome back! Here's what's happening across your {classes.length} classes.</p>
+           <p className="text-slate-500 font-medium">Welcome back! Here's what's happening across your {safeArray(classes).length} classes.</p>
          </div>
       </div>
       
@@ -604,14 +628,14 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editStudentName, setEditStudentName] = useState('');
   
-  // EXTRAER DATOS CON FALLBACKS SEGUROS PARA EVITAR CRASHES:
-  const students = activeClass?.students || [];
-  const activities = activeClass?.activities || [];
+  // EXTRAER DATOS CON FALLBACKS SEGUROS (SAFE ARRAY) PARA EVITAR CRASHES:
+  const students = safeArray(activeClass?.students);
+  const activities = safeArray(activeClass?.activities);
   const grades = activeClass?.grades || {};
   const attitudeLogs = activeClass?.attitudeLogs || {};
   const overrides = activeClass?.overrides || {};
-  const events = activeClass?.events || [];
-  const schedule = activeClass?.schedule || [];
+  const events = safeArray(activeClass?.events);
+  const schedule = safeArray(activeClass?.schedule);
 
   const [isEditingClassName, setIsEditingClassName] = useState(false);
   const [editClassName, setEditClassName] = useState(activeClass?.name || '');
@@ -778,7 +802,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const handleAddToBank = async () => {
     if (!attitudeModal.reason.trim()) return;
     const log = { id: generateId(), date: new Date().toISOString(), reason: attitudeModal.reason, bankDelta: attitudeModal.val, fieldDelta: null, field: null };
-    const currentLogs = attitudeLogs?.[attitudeModal.studentId] || [];
+    const currentLogs = safeArray(attitudeLogs?.[attitudeModal.studentId]);
     await updateClassData({ attitudeLogs: { ...attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
     setAttitudeModal({...attitudeModal, reason: '', val: 0.1});
   };
@@ -786,13 +810,13 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
   const handleTransferFromBank = async () => {
     if (!attitudeModal.transferField) return;
     const log = { id: generateId(), date: new Date().toISOString(), reason: `Applied to ${attitudeModal.transferField}`, bankDelta: -attitudeModal.transferVal, fieldDelta: attitudeModal.transferVal, field: attitudeModal.transferField };
-    const currentLogs = attitudeLogs?.[attitudeModal.studentId] || [];
+    const currentLogs = safeArray(attitudeLogs?.[attitudeModal.studentId]);
     await updateClassData({ attitudeLogs: { ...attitudeLogs, [attitudeModal.studentId]: [log, ...currentLogs] } });
     setAttitudeModal({...attitudeModal, transferVal: 0.1});
   };
 
   const handleDeleteLog = async (studentId, logId) => {
-     const currentLogs = attitudeLogs?.[studentId] || [];
+     const currentLogs = safeArray(attitudeLogs?.[studentId]);
      const filteredLogs = currentLogs.filter(l => l.id !== logId);
      await updateClassData({ attitudeLogs: { ...attitudeLogs, [studentId]: filteredLogs } });
   };
@@ -919,13 +943,13 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
     students.forEach(s => finalSum += calculateFinalMark(s.id, activities, grades, attitudeLogs, overrides));
     avgs.final = finalSum / students.length;
     return avgs;
-  }, [activeClass]);
+  }, [activeClass, activeClass?.grades, activeClass?.overrides]); // Safe deps
 
   const upcomingEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
     return events.filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
-  }, [activeClass]);
+  }, [activeClass?.events]);
 
   return (
     <div className="flex flex-col h-full relative z-10">
@@ -1096,7 +1120,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                     const acts = activities.filter(a => a.field === field);
                     const fieldScore = calculateFieldScore(student.id, field, activities, grades, attitudeLogs, overrides);
                     const isFieldOverridden = overrides?.[student.id]?.[field] !== undefined;
-                    const studentLogs = attitudeLogs?.[student.id] || [];
+                    const studentLogs = safeArray(attitudeLogs?.[student.id]);
                     const fieldAttitude = studentLogs.reduce((acc, log) => (log.field === field && log.fieldDelta) ? acc + log.fieldDelta : acc, 0);
 
                     return (
@@ -1324,27 +1348,85 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                <div className="bg-purple-100 p-2 rounded-xl"><Activity size={24}/></div>
                <h3 className="text-2xl font-bold">Attitude Adjustments</h3>
              </div>
-             <p className="text-sm text-slate-500 mb-6 font-medium">Modifying scores for: <span className="text-slate-800 font-bold">{students.find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
+             <p className="text-sm text-slate-500 mb-6 font-medium">Modifying scores for: <span className="text-slate-800 font-bold">{safeArray(students).find(s=>s.id===attitudeModal.studentId)?.name}</span></p>
              
              <div className="space-y-3">
                {FIELDS.map(field => {
                  const currentVal = attitudeLogs[attitudeModal.studentId]?.[field] || 0;
                  return (
-                   <div key={field} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200/60 hover:border-slate-300 transition-colors">
-                     <span className="font-semibold text-slate-700">{field}</span>
-                     <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-slate-100">
-                       <button onClick={() => handleAttitudeChange(attitudeModal.studentId, field, currentVal - 0.5)} className="w-10 h-10 rounded-lg bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-bold text-xl transition-all flex items-center justify-center">-</button>
-                       <span className={`w-12 text-center font-black text-lg ${currentVal > 0 ? 'text-emerald-600' : currentVal < 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                         {currentVal > 0 ? '+' : ''}{currentVal}
-                       </span>
-                       <button onClick={() => handleAttitudeChange(attitudeModal.studentId, field, currentVal + 0.5)} className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-bold text-xl transition-all flex items-center justify-center">+</button>
-                     </div>
+                   <div key={field} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200/60 hover:border-slate-300 transition-colors hidden">
+                     {/* Mantenemos el estado local antiguo oculto por si acaso */}
                    </div>
                  )
                })}
              </div>
-             <div className="mt-8 flex justify-end">
-               <button onClick={() => setAttitudeModal({isOpen: false, studentId: null})} className="px-6 py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-xl transition-all w-full shadow-lg shadow-slate-900/20">Done</button>
+             {/* NUEVO DISEÑO LEDGER BANK (El correcto) */}
+             <div className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-2">
+                 <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm flex flex-col gap-3">
+                   <h4 className="font-black text-slate-700 flex items-center gap-2 text-sm"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> 1. Record to Bank</h4>
+                   <div className="flex gap-3">
+                     <div className="flex items-center bg-white rounded-2xl border border-white/80 p-1 shadow-inner shrink-0">
+                       <button onClick={() => setAttitudeModal({...attitudeModal, val: attitudeModal.val - 0.1})} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-black text-lg transition-all">-</button>
+                       <span className={`w-14 text-center font-black text-lg ${attitudeModal.val > 0 ? 'text-emerald-600' : attitudeModal.val < 0 ? 'text-red-600' : 'text-slate-400'}`}>{attitudeModal.val > 0 ? '+' : ''}{attitudeModal.val.toFixed(1)}</span>
+                       <button onClick={() => setAttitudeModal({...attitudeModal, val: attitudeModal.val + 0.1})} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-black text-lg transition-all">+</button>
+                     </div>
+                     <input type="text" placeholder="Reason (e.g. Great effort)" value={attitudeModal.reason} onChange={e => setAttitudeModal({...attitudeModal, reason: e.target.value})} className={`w-full border border-white/80 rounded-2xl px-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-medium placeholder:text-slate-400 ${theme.accentRing} focus:ring-4`} onKeyDown={e => e.key === 'Enter' && handleAddToBank()}/>
+                   </div>
+                   <button onClick={handleAddToBank} className="w-full py-3 bg-slate-900 hover:bg-black text-white font-bold rounded-2xl shadow-xl transition-all tracking-wide">Add to Bank</button>
+                 </div>
+
+                 <div className="bg-white/50 p-5 rounded-[2rem] border border-white/60 shadow-sm flex flex-col gap-3">
+                   <h4 className="font-black text-slate-700 flex items-center gap-2 text-sm"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> 2. Apply Bank Points to Grade</h4>
+                   <div className="flex gap-3">
+                     <div className="flex items-center bg-white rounded-2xl border border-white/80 p-1 shadow-inner shrink-0">
+                       <button onClick={() => setAttitudeModal({...attitudeModal, transferVal: attitudeModal.transferVal - 0.1})} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-500 hover:text-white font-black text-lg transition-all">-</button>
+                       <span className={`w-14 text-center font-black text-lg text-indigo-600`}>{attitudeModal.transferVal > 0 ? '+' : ''}{attitudeModal.transferVal.toFixed(1)}</span>
+                       <button onClick={() => setAttitudeModal({...attitudeModal, transferVal: attitudeModal.transferVal + 0.1})} className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-500 hover:text-white font-black text-lg transition-all">+</button>
+                     </div>
+                     <select value={attitudeModal.transferField} onChange={e => setAttitudeModal({...attitudeModal, transferField: e.target.value})} className={`w-full border border-white/80 rounded-2xl px-4 focus:bg-white bg-white/50 outline-none transition-all shadow-inner font-bold text-slate-700 ${theme.accentRing} focus:ring-4`}>
+                       {FIELDS.map(f => <option key={f} value={f}>Apply to {f}</option>)}
+                     </select>
+                   </div>
+                   <button onClick={handleTransferFromBank} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-xl transition-all tracking-wide">Deduct & Apply</button>
+                 </div>
+                 
+                 <div className="mt-2 p-5 bg-white/40 rounded-[2rem] shadow-inner border border-white/60">
+                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex justify-between items-center">
+                      Ledger History
+                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black text-sm border border-emerald-200 shadow-sm">
+                         Bank: {getAttitudeData(attitudeModal.studentId, activeClass).bank > 0 ? '+' : ''}{getAttitudeData(attitudeModal.studentId, activeClass).bank.toFixed(1)}
+                      </span>
+                    </h4>
+                    <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                      {(() => {
+                        const { logs } = getAttitudeData(attitudeModal.studentId, activeClass);
+                        if (logs.length === 0) return <p className="text-sm text-slate-400 font-medium italic text-center py-2">No records yet.</p>;
+                        return logs.map(log => {
+                          const isTransfer = log.bankDelta !== null && log.fieldDelta !== null && log.field !== null;
+                          const displayVal = isTransfer ? log.fieldDelta : (log.bankDelta || log.fieldDelta);
+                          const displayColor = displayVal > 0 ? 'text-emerald-600' : 'text-red-600';
+                          return (
+                            <div key={log.id} className="text-xs font-medium text-slate-600 bg-white p-3 rounded-2xl border border-white flex items-center justify-between gap-2 shadow-sm group">
+                              <div className="flex items-center gap-3">
+                                <div className={`font-black w-8 text-right shrink-0 text-sm ${displayColor}`}>
+                                  {displayVal > 0 ? '+' : ''}{Number(displayVal).toFixed(1)}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-slate-800 block truncate max-w-[150px]">{log.reason}</span>
+                                  <span className="text-[10px] text-slate-500">{isTransfer ? `Applied to ${log.field}` : (log.field ? `Applied to ${log.field}` : 'Banked')} • {formatDate(log.date)}</span>
+                                </div>
+                              </div>
+                              <button onClick={() => handleDeleteLog(attitudeModal.studentId, log.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Undo this entry"><Undo2 size={14}/></button>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                 </div>
+             </div>
+
+             <div className="mt-6 flex justify-end">
+               <button onClick={() => setAttitudeModal({isOpen: false, studentId: null, reason: '', val: 0.1, transferVal: 0.1, transferField: 'Grammar'})} className="px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-2xl transition-all w-full shadow-sm text-lg">Close Ledger</button>
              </div>
           </div>
         </div>
@@ -1388,7 +1470,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
                   <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><MessageSquare size={24}/></div>
                   Report Comments
                 </h3>
-                <p className="text-slate-500 mt-2 font-medium">Writing comments for: <span className="text-slate-800 font-bold">{students.find(s=>s.id===commentModal.studentId)?.name}</span></p>
+                <p className="text-slate-500 mt-2 font-medium">Writing comments for: <span className="text-slate-800 font-bold">{safeArray(students).find(s=>s.id===commentModal.studentId)?.name}</span></p>
               </div>
               <button onClick={() => setCommentModal({isOpen: false, studentId: null, text: ''})} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors"><X size={24}/></button>
             </div>
@@ -1408,102 +1490,7 @@ function ClassView({ activeClass, userId, isDebug, globalSettings, theme, setCla
           </div>
         </div>
       )}
-
-      {/* Modal de Gráficos (Dashboard) */}
-      {chartsOpen && (
-        <div className="fixed inset-0 bg-slate-100/95 backdrop-blur-md z-50 flex flex-col fade-enter">
-          <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shadow-sm">
-            <h2 className="text-2xl font-black flex items-center gap-3 text-slate-800">
-              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><BarChart2 size={28}/></div>
-              Weight Distributions
-            </h2>
-            <button onClick={() => setChartsOpen(false)} className="p-3 bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all font-bold flex items-center gap-2">
-              <X size={20}/> Close Dashboard
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {FIELDS.map(field => {
-                const acts = activities.filter(a => a.field === field);
-                const totalW = acts.reduce((acc, curr) => acc + curr.weight, 0);
-                const data = acts.map(a => ({ name: a.name, value: a.weight }));
-
-                return (
-                  <div key={field} className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col h-[380px] modal-enter">
-                    <div className="text-center mb-4">
-                      <h3 className="font-black text-xl text-slate-800 tracking-wide">{field}</h3>
-                      <p className="text-sm font-medium text-slate-400 mt-1 uppercase tracking-wider">Weight Breakdown</p>
-                    </div>
-                    {data.length > 0 ? (
-                      <div className="flex-1 relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={data}
-                              cx="50%" cy="45%"
-                              innerRadius={65} outerRadius={90}
-                              paddingAngle={5}
-                              dataKey="value"
-                              stroke="none"
-                            >
-                              {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip 
-                              formatter={(value) => [`${value}% weight`, 'Weight']} 
-                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
-                            />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle"/>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 m-4">
-                        <PieChart size={32} className="mb-2 opacity-20"/>
-                        <span className="font-medium">No activities added</span>
-                      </div>
-                    )}
-                    <div className="text-center text-sm font-bold text-slate-600 bg-slate-50 py-2 rounded-xl mt-2">
-                      Total Points in {field}: <span className="text-indigo-600">{totalW}</span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Distribución Global */}
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-3xl shadow-xl shadow-indigo-500/30 flex flex-col h-[380px] modal-enter text-white">
-                 <div className="text-center mb-2">
-                   <h3 className="font-black text-xl tracking-wide">Global Distribution</h3>
-                   <p className="text-sm font-medium text-indigo-100 mt-1 uppercase tracking-wider">Final Average</p>
-                 </div>
-                 <p className="text-sm text-center text-indigo-100/80 mb-4 px-4 font-medium">The final mark averages the 5 fields equally (20% each).</p>
-                 <div className="flex-1 relative filter drop-shadow-lg">
-                   <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={FIELDS.map(f => ({name: f, value: 20}))}
-                          cx="50%" cy="45%"
-                          innerRadius={65} outerRadius={90}
-                          paddingAngle={2}
-                          dataKey="value"
-                          stroke="rgba(255,255,255,0.2)"
-                          strokeWidth={2}
-                        >
-                          {FIELDS.map((f, index) => <Cell key={`global-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value) => [`${value}% of Final Grade`, 'Global Weight']}
-                          contentStyle={{ borderRadius: '12px', border: 'none', color: '#1e293b' }} 
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      
       {/* Calendario */}
       <AnimatePresence>
         {calendarOpen && (
@@ -1523,8 +1510,8 @@ function ClassCalendar({ activeClass, onUpdate, theme, onClose }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [eventModal, setEventModal] = useState({ isOpen: false, day: null, title: '', description: '' });
 
-  const schedule = activeClass?.schedule || [];
-  const events = activeClass?.events || [];
+  const schedule = safeArray(activeClass?.schedule);
+  const events = safeArray(activeClass?.events);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
